@@ -1,0 +1,78 @@
+# name: test/sql/fakeit.test
+# description: test fakeit extension
+# group: [fakeit]
+
+# Before we load the extension, this will fail
+statement error
+SELECT fakeit_name_first();
+----
+Catalog Error: Scalar Function with name fakeit_name_first does not exist!
+
+# Require statement will ensure the extension is loaded from now on
+require fakeit
+
+# Test basic name functions
+query I
+SELECT length(fakeit_name_first()) > 0;
+----
+true
+
+query I
+SELECT length(fakeit_name_last()) > 0;
+----
+true
+
+query I
+SELECT length(fakeit_name_full()) > 0;
+----
+true
+
+# Test address functions
+query I
+SELECT length(fakeit_address_city()) > 0;
+----
+true
+
+query I
+SELECT length(fakeit_address_state()) > 0;
+----
+true
+
+query I
+SELECT length(fakeit_address_zip()) > 0;
+----
+true
+
+# Test contact functions
+query I
+SELECT length(fakeit_contact_email()) > 0;
+----
+true
+
+query I
+SELECT length(fakeit_contact_phone()) > 0;
+----
+true
+
+# Test internet functions
+query I
+SELECT length(fakeit_internet_domain_name()) > 0;
+----
+true
+
+query I
+SELECT length(fakeit_uuid_v4()) = 36;
+----
+true
+
+# Test company functions
+query I
+SELECT length(fakeit_company_company()) > 0;
+----
+true
+
+# Test user agent functions
+query I
+SELECT length(fakeit_user_agent_chrome()) > 0;
+----
+true
