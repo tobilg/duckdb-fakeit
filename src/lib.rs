@@ -9,9 +9,6 @@ use std::{
     error::Error,
     ffi::CString,
 };
-use serde_json;
-
-const EXTENSION_NAME: &str = env!("CARGO_PKG_NAME");
 
 // Helper function to register a scalar function that takes no arguments and returns VARCHAR
 unsafe fn register_varchar_fn(
