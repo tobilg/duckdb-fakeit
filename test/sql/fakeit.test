@@ -1,0 +1,675 @@
+# name: test/sql/fakeit.test
+# description: Comprehensive test for ALL fakeit extension functions
+# group: [fakeit]
+
+# Before we load the extension, functions should not exist
+statement error
+SELECT fakeit_name_first();
+----
+Catalog Error: Scalar Function with name fakeit_name_first does not exist!
+
+# Load the extension
+require fakeit
+
+### ADDRESS FUNCTIONS ###
+
+# Test address functions
+query I
+SELECT length(fakeit_address_street()) > 0;
+----
+true
+
+query I
+SELECT length(fakeit_address_street_number()) > 0;
+----
+true
+
+query I
+SELECT length(fakeit_address_street_prefix()) > 0;
+----
+true
+
+query I
+SELECT length(fakeit_address_street_name()) > 0;
+----
+true
+
+query I
+SELECT length(fakeit_address_street_suffix()) > 0;
+----
+true
+
+query I
+SELECT length(fakeit_address_city()) > 0;
+----
+true
+
+query I
+SELECT length(fakeit_address_state()) > 0;
+----
+true
+
+query I
+SELECT length(fakeit_address_state_abr()) > 0;
+----
+true
+
+query I
+SELECT length(fakeit_address_zip()) > 0;
+----
+true
+
+query I
+SELECT length(fakeit_address_country()) > 0;
+----
+true
+
+query I
+SELECT length(fakeit_address_country_abr()) > 0;
+----
+true
+
+query I
+SELECT fakeit_address_latitude() BETWEEN -90.0 AND 90.0;
+----
+true
+
+query I
+SELECT fakeit_address_longitude() BETWEEN -180.0 AND 180.0;
+----
+true
+
+query I
+SELECT fakeit_address_latitude_in_range(10.0, 20.0) BETWEEN 10.0 AND 20.0;
+----
+true
+
+query I
+SELECT fakeit_address_longitude_in_range(-100.0, -50.0) BETWEEN -100.0 AND -50.0;
+----
+true
+
+### NAME FUNCTIONS ###
+
+query I
+SELECT length(fakeit_name_first()) > 0;
+----
+true
+
+query I
+SELECT length(fakeit_name_last()) > 0;
+----
+true
+
+query I
+SELECT length(fakeit_name_full()) > 0;
+----
+true
+
+query I
+SELECT length(fakeit_name_prefix()) > 0;
+----
+true
+
+query I
+SELECT length(fakeit_name_suffix()) > 0;
+----
+true
+
+### COMPANY FUNCTIONS ###
+
+query I
+SELECT length(fakeit_company_company()) > 0;
+----
+true
+
+query I
+SELECT length(fakeit_company_company_suffix()) > 0;
+----
+true
+
+query I
+SELECT length(fakeit_company_buzzword()) > 0;
+----
+true
+
+query I
+SELECT length(fakeit_company_bs()) > 0;
+----
+true
+
+### CONTACT FUNCTIONS ###
+
+query I
+SELECT length(fakeit_contact_email()) > 0;
+----
+true
+
+query I
+SELECT length(fakeit_contact_phone()) > 0;
+----
+true
+
+query I
+SELECT length(fakeit_contact_phone_formatted()) > 0;
+----
+true
+
+### INTERNET FUNCTIONS ###
+
+query I
+SELECT length(fakeit_internet_ipv4_address()) > 0;
+----
+true
+
+query I
+SELECT length(fakeit_internet_ipv6_address()) > 0;
+----
+true
+
+query I
+SELECT length(fakeit_internet_domain_name()) > 0;
+----
+true
+
+query I
+SELECT length(fakeit_internet_domain_suffix()) > 0;
+----
+true
+
+query I
+SELECT length(fakeit_internet_http_method()) > 0;
+----
+true
+
+query I
+SELECT length(fakeit_internet_mac_address()) > 0;
+----
+true
+
+query I
+SELECT length(fakeit_internet_username()) > 0;
+----
+true
+
+### ANIMAL FUNCTIONS ###
+
+query I
+SELECT length(fakeit_animal_pet_name()) > 0;
+----
+true
+
+query I
+SELECT length(fakeit_animal_animal()) > 0;
+----
+true
+
+query I
+SELECT length(fakeit_animal_farm()) > 0;
+----
+true
+
+query I
+SELECT length(fakeit_animal_cat()) > 0;
+----
+true
+
+query I
+SELECT length(fakeit_animal_dog()) > 0;
+----
+true
+
+### BEER FUNCTIONS ###
+
+query I
+SELECT length(fakeit_beer_name()) > 0;
+----
+true
+
+query I
+SELECT length(fakeit_beer_style()) > 0;
+----
+true
+
+query I
+SELECT length(fakeit_beer_hop()) > 0;
+----
+true
+
+query I
+SELECT length(fakeit_beer_yeast()) > 0;
+----
+true
+
+query I
+SELECT length(fakeit_beer_malt()) > 0;
+----
+true
+
+query I
+SELECT length(fakeit_beer_ibu()) > 0;
+----
+true
+
+query I
+SELECT length(fakeit_beer_alcohol()) > 0;
+----
+true
+
+query I
+SELECT length(fakeit_beer_blg()) > 0;
+----
+true
+
+### BOOLEAN FUNCTION ###
+
+query I
+SELECT typeof(fakeit_bool());
+----
+BOOLEAN
+
+### COLOR FUNCTIONS ###
+
+query I
+SELECT length(fakeit_color_full()) > 0;
+----
+true
+
+query I
+SELECT length(fakeit_color_hex()) > 0;
+----
+true
+
+query I
+SELECT length(fakeit_color_safe()) > 0;
+----
+true
+
+query I
+SELECT length(fakeit_color_rgb()) > 0;
+----
+true
+
+### CURRENCY FUNCTIONS ###
+
+query I
+SELECT length(fakeit_currency_short()) > 0;
+----
+true
+
+query I
+SELECT length(fakeit_currency_long()) > 0;
+----
+true
+
+query I
+SELECT length(fakeit_currency_price()) > 0;
+----
+true
+
+### DATETIME FUNCTIONS ###
+
+query I
+SELECT length(fakeit_datetime_month()) > 0;
+----
+true
+
+query I
+SELECT length(fakeit_datetime_day()) > 0;
+----
+true
+
+query I
+SELECT length(fakeit_datetime_week_day()) > 0;
+----
+true
+
+query I
+SELECT length(fakeit_datetime_year()) > 0;
+----
+true
+
+query I
+SELECT length(fakeit_datetime_hour()) > 0;
+----
+true
+
+query I
+SELECT length(fakeit_datetime_minute()) > 0;
+----
+true
+
+query I
+SELECT length(fakeit_datetime_second()) > 0;
+----
+true
+
+query I
+SELECT length(fakeit_datetime_nanosecond()) > 0;
+----
+true
+
+query I
+SELECT length(fakeit_datetime_timezone()) > 0;
+----
+true
+
+query I
+SELECT length(fakeit_datetime_timezone_full()) > 0;
+----
+true
+
+query I
+SELECT length(fakeit_datetime_timezone_abv()) > 0;
+----
+true
+
+query I
+SELECT length(fakeit_datetime_timezone_offset()) > 0;
+----
+true
+
+query I
+SELECT length(fakeit_datetime_date()) > 0;
+----
+true
+
+### FILE FUNCTIONS ###
+
+query I
+SELECT length(fakeit_file_extension()) > 0;
+----
+true
+
+query I
+SELECT length(fakeit_file_mime_type()) > 0;
+----
+true
+
+### HACKER FUNCTIONS ###
+
+query I
+SELECT length(fakeit_hacker_phrase()) > 0;
+----
+true
+
+query I
+SELECT length(fakeit_hacker_abbreviation()) > 0;
+----
+true
+
+query I
+SELECT length(fakeit_hacker_adjective()) > 0;
+----
+true
+
+query I
+SELECT length(fakeit_hacker_noun()) > 0;
+----
+true
+
+query I
+SELECT length(fakeit_hacker_verb()) > 0;
+----
+true
+
+query I
+SELECT length(fakeit_hacker_ingverb()) > 0;
+----
+true
+
+### HIPSTER FUNCTIONS ###
+
+query I
+SELECT length(fakeit_hipster_word()) > 0;
+----
+true
+
+query I
+SELECT length(fakeit_hipster_sentence()) > 0;
+----
+true
+
+query I
+SELECT length(fakeit_hipster_paragraph()) > 0;
+----
+true
+
+### IMAGE FUNCTION ###
+
+query I
+SELECT length(fakeit_image_url()) > 0;
+----
+true
+
+### JOB FUNCTIONS ###
+
+query I
+SELECT length(fakeit_job_title()) > 0;
+----
+true
+
+query I
+SELECT length(fakeit_job_descriptor()) > 0;
+----
+true
+
+query I
+SELECT length(fakeit_job_level()) > 0;
+----
+true
+
+### LANGUAGE FUNCTIONS ###
+
+query I
+SELECT length(fakeit_language_random()) > 0;
+----
+true
+
+query I
+SELECT length(fakeit_language_abbreviation()) > 0;
+----
+true
+
+query I
+SELECT length(fakeit_language_programming()) > 0;
+----
+true
+
+### LOG LEVEL FUNCTIONS ###
+
+query I
+SELECT length(fakeit_log_level_general()) > 0;
+----
+true
+
+query I
+SELECT length(fakeit_log_level_syslog()) > 0;
+----
+true
+
+query I
+SELECT length(fakeit_log_level_apache()) > 0;
+----
+true
+
+### PASSWORD FUNCTION ###
+
+query I
+SELECT length(fakeit_password_generate()) = 16;
+----
+true
+
+### PAYMENT FUNCTIONS ###
+
+query I
+SELECT length(fakeit_payment_credit_card_type()) > 0;
+----
+true
+
+query I
+SELECT length(fakeit_payment_credit_card_number()) > 0;
+----
+true
+
+query I
+SELECT length(fakeit_payment_credit_card_luhn_number()) > 0;
+----
+true
+
+query I
+SELECT length(fakeit_payment_credit_card_exp()) > 0;
+----
+true
+
+query I
+SELECT length(fakeit_payment_credit_card_cvv()) > 0;
+----
+true
+
+### PERSON FUNCTIONS ###
+
+query I
+SELECT length(fakeit_person_ssn()) > 0;
+----
+true
+
+query I
+SELECT length(fakeit_person_gender()) > 0;
+----
+true
+
+### STATUS CODE FUNCTIONS ###
+
+query I
+SELECT typeof(fakeit_status_code_simple());
+----
+BIGINT
+
+query I
+SELECT typeof(fakeit_status_code_general());
+----
+BIGINT
+
+### UUID FUNCTIONS ###
+
+query I
+SELECT length(fakeit_uuid_v1()) = 36;
+----
+true
+
+query I
+SELECT length(fakeit_uuid_v4()) = 36;
+----
+true
+
+### USER AGENT FUNCTIONS ###
+
+query I
+SELECT length(fakeit_user_agent_chrome()) > 0;
+----
+true
+
+query I
+SELECT length(fakeit_user_agent_firefox()) > 0;
+----
+true
+
+query I
+SELECT length(fakeit_user_agent_safari()) > 0;
+----
+true
+
+query I
+SELECT length(fakeit_user_agent_opera()) > 0;
+----
+true
+
+query I
+SELECT length(fakeit_user_agent_linux_platform_token()) > 0;
+----
+true
+
+query I
+SELECT length(fakeit_user_agent_mac_platform_token()) > 0;
+----
+true
+
+query I
+SELECT length(fakeit_user_agent_windows_platform_token()) > 0;
+----
+true
+
+query I
+SELECT length(fakeit_user_agent_random_platform()) > 0;
+----
+true
+
+### VEHICLE FUNCTIONS ###
+
+query I
+SELECT length(fakeit_vehicle_vehicle_type()) > 0;
+----
+true
+
+query I
+SELECT length(fakeit_vehicle_fuel()) > 0;
+----
+true
+
+query I
+SELECT length(fakeit_vehicle_transmission_gear()) > 0;
+----
+true
+
+query I
+SELECT length(fakeit_vehicle_car_maker()) > 0;
+----
+true
+
+query I
+SELECT length(fakeit_vehicle_car_model()) > 0;
+----
+true
+
+### WORDS FUNCTIONS ###
+
+query I
+SELECT length(fakeit_words_word()) > 0;
+----
+true
+
+query I
+SELECT length(fakeit_words_sentence()) > 0;
+----
+true
+
+query I
+SELECT length(fakeit_words_paragraph()) > 0;
+----
+true
+
+query I
+SELECT length(fakeit_words_question()) > 0;
+----
+true
+
+query I
+SELECT length(fakeit_words_quote()) > 0;
+----
+true
+
+### GENERATOR FUNCTION ###
+
+query I
+SELECT length(fakeit_generator_generate()) > 0;
+----
+true
+
+# Test that functions return different values (randomness check)
+query I
+SELECT fakeit_name_first() != fakeit_name_first() OR
+       fakeit_name_last() != fakeit_name_last() OR
+       fakeit_address_city() != fakeit_address_city();
+----
+true
