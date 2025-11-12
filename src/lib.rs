@@ -9,6 +9,7 @@ use std::{
     error::Error,
     ffi::CString,
 };
+use serde_json;
 
 const EXTENSION_NAME: &str = env!("CARGO_PKG_NAME");
 
@@ -57,6 +58,209 @@ unsafe fn register_varchar_fn(
         func_ptr,
         None,
     );
+
+    ffi::duckdb_scalar_function_set_function(scalar_function, Some(wrapper));
+
+    let state = ffi::duckdb_register_scalar_function(con, scalar_function);
+    ffi::duckdb_destroy_scalar_function(&mut (scalar_function as *mut _));
+
+    if state != ffi::DuckDBSuccess {
+        return Err(format!("Failed to register function: {}", name).into());
+    }
+
+    Ok(())
+}
+
+// Helper function for functions returning BIGINT
+unsafe fn register_bigint_fn(
+    con: ffi::duckdb_connection,
+    name: &str,
+    func: fn() -> i64,
+) -> Result<(), Box<dyn Error>>
+{
+    unsafe extern "C" fn wrapper(
+        _context: ffi::duckdb_function_info,
+        input: ffi::duckdb_data_chunk,
+        output: ffi::duckdb_vector,
+    ) {
+        let size = ffi::duckdb_data_chunk_get_size(input);
+        let func_ptr = ffi::duckdb_scalar_function_get_extra_info(_context) as *const fn() -> i64;
+        let func = *func_ptr;
+        let result = func();
+        let output_data = ffi::duckdb_vector_get_data(output) as *mut i64;
+
+        for i in 0..size {
+            *output_data.add(i as usize) = result;
+        }
+    }
+
+    let name_c = CString::new(name)?;
+    let scalar_function = ffi::duckdb_create_scalar_function();
+
+    ffi::duckdb_scalar_function_set_name(scalar_function, name_c.as_ptr());
+
+    let return_type = ffi::duckdb_create_logical_type(ffi::DUCKDB_TYPE_DUCKDB_TYPE_BIGINT);
+    ffi::duckdb_scalar_function_set_return_type(scalar_function, return_type);
+    ffi::duckdb_destroy_logical_type(&mut (return_type as *mut _));
+
+    let func_box = Box::new(func);
+    let func_ptr = Box::into_raw(func_box) as *mut std::ffi::c_void;
+    ffi::duckdb_scalar_function_set_extra_info(scalar_function, func_ptr, None);
+
+    ffi::duckdb_scalar_function_set_function(scalar_function, Some(wrapper));
+
+    let state = ffi::duckdb_register_scalar_function(con, scalar_function);
+    ffi::duckdb_destroy_scalar_function(&mut (scalar_function as *mut _));
+
+    if state != ffi::DuckDBSuccess {
+        return Err(format!("Failed to register function: {}", name).into());
+    }
+
+    Ok(())
+}
+
+// Helper function for functions returning DOUBLE
+unsafe fn register_double_fn(
+    con: ffi::duckdb_connection,
+    name: &str,
+    func: fn() -> f64,
+) -> Result<(), Box<dyn Error>>
+{
+    unsafe extern "C" fn wrapper(
+        _context: ffi::duckdb_function_info,
+        input: ffi::duckdb_data_chunk,
+        output: ffi::duckdb_vector,
+    ) {
+        let size = ffi::duckdb_data_chunk_get_size(input);
+        let func_ptr = ffi::duckdb_scalar_function_get_extra_info(_context) as *const fn() -> f64;
+        let func = *func_ptr;
+        let result = func();
+        let output_data = ffi::duckdb_vector_get_data(output) as *mut f64;
+
+        for i in 0..size {
+            *output_data.add(i as usize) = result;
+        }
+    }
+
+    let name_c = CString::new(name)?;
+    let scalar_function = ffi::duckdb_create_scalar_function();
+
+    ffi::duckdb_scalar_function_set_name(scalar_function, name_c.as_ptr());
+
+    let return_type = ffi::duckdb_create_logical_type(ffi::DUCKDB_TYPE_DUCKDB_TYPE_DOUBLE);
+    ffi::duckdb_scalar_function_set_return_type(scalar_function, return_type);
+    ffi::duckdb_destroy_logical_type(&mut (return_type as *mut _));
+
+    let func_box = Box::new(func);
+    let func_ptr = Box::into_raw(func_box) as *mut std::ffi::c_void;
+    ffi::duckdb_scalar_function_set_extra_info(scalar_function, func_ptr, None);
+
+    ffi::duckdb_scalar_function_set_function(scalar_function, Some(wrapper));
+
+    let state = ffi::duckdb_register_scalar_function(con, scalar_function);
+    ffi::duckdb_destroy_scalar_function(&mut (scalar_function as *mut _));
+
+    if state != ffi::DuckDBSuccess {
+        return Err(format!("Failed to register function: {}", name).into());
+    }
+
+    Ok(())
+}
+
+// Helper function for functions returning BOOLEAN
+unsafe fn register_boolean_fn(
+    con: ffi::duckdb_connection,
+    name: &str,
+    func: fn() -> bool,
+) -> Result<(), Box<dyn Error>>
+{
+    unsafe extern "C" fn wrapper(
+        _context: ffi::duckdb_function_info,
+        input: ffi::duckdb_data_chunk,
+        output: ffi::duckdb_vector,
+    ) {
+        let size = ffi::duckdb_data_chunk_get_size(input);
+        let func_ptr = ffi::duckdb_scalar_function_get_extra_info(_context) as *const fn() -> bool;
+        let func = *func_ptr;
+        let result = func();
+        let output_data = ffi::duckdb_vector_get_data(output) as *mut bool;
+
+        for i in 0..size {
+            *output_data.add(i as usize) = result;
+        }
+    }
+
+    let name_c = CString::new(name)?;
+    let scalar_function = ffi::duckdb_create_scalar_function();
+
+    ffi::duckdb_scalar_function_set_name(scalar_function, name_c.as_ptr());
+
+    let return_type = ffi::duckdb_create_logical_type(ffi::DUCKDB_TYPE_DUCKDB_TYPE_BOOLEAN);
+    ffi::duckdb_scalar_function_set_return_type(scalar_function, return_type);
+    ffi::duckdb_destroy_logical_type(&mut (return_type as *mut _));
+
+    let func_box = Box::new(func);
+    let func_ptr = Box::into_raw(func_box) as *mut std::ffi::c_void;
+    ffi::duckdb_scalar_function_set_extra_info(scalar_function, func_ptr, None);
+
+    ffi::duckdb_scalar_function_set_function(scalar_function, Some(wrapper));
+
+    let state = ffi::duckdb_register_scalar_function(con, scalar_function);
+    ffi::duckdb_destroy_scalar_function(&mut (scalar_function as *mut _));
+
+    if state != ffi::DuckDBSuccess {
+        return Err(format!("Failed to register function: {}", name).into());
+    }
+
+    Ok(())
+}
+
+// Helper function for functions with 2 DOUBLE parameters returning DOUBLE
+unsafe fn register_double_double_fn(
+    con: ffi::duckdb_connection,
+    name: &str,
+    func: fn(f64, f64) -> f64,
+) -> Result<(), Box<dyn Error>>
+{
+    unsafe extern "C" fn wrapper(
+        _context: ffi::duckdb_function_info,
+        input: ffi::duckdb_data_chunk,
+        output: ffi::duckdb_vector,
+    ) {
+        let size = ffi::duckdb_data_chunk_get_size(input);
+        let func_ptr = ffi::duckdb_scalar_function_get_extra_info(_context) as *const fn(f64, f64) -> f64;
+        let func = *func_ptr;
+
+        let input_vector1 = ffi::duckdb_data_chunk_get_vector(input, 0);
+        let input_vector2 = ffi::duckdb_data_chunk_get_vector(input, 1);
+        let input_data1 = ffi::duckdb_vector_get_data(input_vector1) as *const f64;
+        let input_data2 = ffi::duckdb_vector_get_data(input_vector2) as *const f64;
+        let output_data = ffi::duckdb_vector_get_data(output) as *mut f64;
+
+        for i in 0..size {
+            let val1 = *input_data1.add(i as usize);
+            let val2 = *input_data2.add(i as usize);
+            *output_data.add(i as usize) = func(val1, val2);
+        }
+    }
+
+    let name_c = CString::new(name)?;
+    let scalar_function = ffi::duckdb_create_scalar_function();
+
+    ffi::duckdb_scalar_function_set_name(scalar_function, name_c.as_ptr());
+
+    let param_type = ffi::duckdb_create_logical_type(ffi::DUCKDB_TYPE_DUCKDB_TYPE_DOUBLE);
+    ffi::duckdb_scalar_function_add_parameter(scalar_function, param_type);
+    ffi::duckdb_scalar_function_add_parameter(scalar_function, param_type);
+    ffi::duckdb_destroy_logical_type(&mut (param_type as *mut _));
+
+    let return_type = ffi::duckdb_create_logical_type(ffi::DUCKDB_TYPE_DUCKDB_TYPE_DOUBLE);
+    ffi::duckdb_scalar_function_set_return_type(scalar_function, return_type);
+    ffi::duckdb_destroy_logical_type(&mut (return_type as *mut _));
+
+    let func_box = Box::new(func);
+    let func_ptr = Box::into_raw(func_box) as *mut std::ffi::c_void;
+    ffi::duckdb_scalar_function_set_extra_info(scalar_function, func_ptr, None);
 
     ffi::duckdb_scalar_function_set_function(scalar_function, Some(wrapper));
 
@@ -246,6 +450,53 @@ pub unsafe fn extension_entrypoint(con: Connection) -> Result<(), Box<dyn Error>
     })?;
     register_varchar_fn(con_handle, "fakeit_words_question", fakeit::words::question)?;
     register_varchar_fn(con_handle, "fakeit_words_quote", fakeit::words::quote)?;
+
+    // ========== ADDITIONAL MISSING FUNCTIONS ==========
+
+    // Boolean function
+    register_boolean_fn(con_handle, "fakeit_bool", fakeit::bool_rand::bool)?;
+
+    // Address numeric functions (convert f32 to f64)
+    register_double_fn(con_handle, "fakeit_address_latitude", || fakeit::address::latitude() as f64)?;
+    register_double_fn(con_handle, "fakeit_address_longitude", || fakeit::address::longitude() as f64)?;
+
+    // Address parameterized functions (convert f64 to f32 for parameters, f32 to f64 for result)
+    register_double_double_fn(con_handle, "fakeit_address_latitude_in_range", |min, max| fakeit::address::latitude_in_range(min as f32, max as f32) as f64)?;
+    register_double_double_fn(con_handle, "fakeit_address_longitude_in_range", |min, max| fakeit::address::longitude_in_range(min as f32, max as f32) as f64)?;
+
+    // DateTime functions (they return strings, not numbers in this crate)
+    register_varchar_fn(con_handle, "fakeit_datetime_year", || fakeit::datetime::year().to_string())?;
+    register_varchar_fn(con_handle, "fakeit_datetime_hour", || fakeit::datetime::hour().to_string())?;
+    register_varchar_fn(con_handle, "fakeit_datetime_minute", || fakeit::datetime::minute().to_string())?;
+    register_varchar_fn(con_handle, "fakeit_datetime_second", || fakeit::datetime::second().to_string())?;
+    register_varchar_fn(con_handle, "fakeit_datetime_nanosecond", || fakeit::datetime::nanosecond().to_string())?;
+    register_varchar_fn(con_handle, "fakeit_datetime_timezone_offset", || fakeit::datetime::timezone_offset().to_string())?;
+
+    // DateTime date function
+    register_varchar_fn(con_handle, "fakeit_datetime_date", || {
+        format!("{:?}", fakeit::datetime::date())
+    })?;
+
+    // Status code functions
+    register_bigint_fn(con_handle, "fakeit_status_code_simple", || fakeit::status_code::simple() as i64)?;
+    register_bigint_fn(con_handle, "fakeit_status_code_general", || fakeit::status_code::general() as i64)?;
+
+    // Currency functions (compact returns a struct, skip it)
+    register_varchar_fn(con_handle, "fakeit_currency_price", || {
+        format!("{:.2}", fakeit::currency::price(0.0, 1000.0))
+    })?;
+
+    // Generator function
+    register_varchar_fn(con_handle, "fakeit_generator_generate", || {
+        fakeit::generator::generate("{firstname} {lastname}".to_string())
+    })?;
+
+    // Payment credit_card_luhn_number
+    register_varchar_fn(con_handle, "fakeit_payment_credit_card_luhn_number", fakeit::payment::credit_card_luhn_number)?;
+
+    // Note: Info functions (address::info, contact::info, job::info, person::info, vehicle::info, payment::credit_card)
+    // are not implemented because the struct types don't expose their fields publicly
+    // and don't implement Serialize or Debug traits. Users can call individual field functions instead.
 
     Ok(())
 }
