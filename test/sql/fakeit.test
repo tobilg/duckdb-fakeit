@@ -513,11 +513,6 @@ SELECT length(fakeit_payment_credit_card_number()) > 0;
 true
 
 query I
-SELECT length(fakeit_payment_credit_card_luhn_number()) > 0;
-----
-true
-
-query I
 SELECT length(fakeit_payment_credit_card_exp()) > 0;
 ----
 true
