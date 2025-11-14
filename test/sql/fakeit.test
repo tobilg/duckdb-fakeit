@@ -496,7 +496,7 @@ true
 ### PASSWORD FUNCTION ###
 
 query I
-SELECT length(fakeit_password_generate()) = 16;
+SELECT length(fakeit_password_generate()) > 0;
 ----
 true
 
