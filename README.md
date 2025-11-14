@@ -500,7 +500,7 @@ Test with different DuckDB versions:
 
 ```shell
 make clean_all
-DUCKDB_TEST_VERSION=v1.4.1 make configure
+DUCKDB_TEST_VERSION=v1.4.2 make configure
 make debug
 make test_debug
 ```
@@ -531,7 +531,7 @@ SELECT fakeit_name_full();
 
 ### Local Testing with Python 3.14+
 
-Due to DuckDB's unstable C API (`USE_UNSTABLE_C_API=1`), local testing may encounter segmentation faults when using Python 3.14+, as pre-built wheels don't exist for DuckDB v1.4.1 with Python 3.14. The extension works perfectly in CI/CD and for end users.
+Due to DuckDB's unstable C API (`USE_UNSTABLE_C_API=1`), local testing may encounter segmentation faults when using Python 3.14+, as pre-built wheels don't exist for DuckDB v1.4.2 with Python 3.14. The extension works perfectly in CI/CD and for end users.
 
 **Workaround**: Use Python 3.13 for local testing. The Makefile is already configured to use Python 3.13.
 
