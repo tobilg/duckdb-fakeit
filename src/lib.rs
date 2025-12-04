@@ -39,6 +39,10 @@ macro_rules! varchar_scalar {
                     LogicalTypeHandle::from(LogicalTypeId::Varchar),
                 )]
             }
+
+            fn volatile() -> bool {
+                true
+            }
         }
     };
 }
@@ -71,6 +75,10 @@ macro_rules! bigint_scalar {
                     vec![],
                     LogicalTypeHandle::from(LogicalTypeId::Bigint),
                 )]
+            }
+
+            fn volatile() -> bool {
+                true
             }
         }
     };
@@ -105,6 +113,10 @@ macro_rules! double_scalar {
                     LogicalTypeHandle::from(LogicalTypeId::Double),
                 )]
             }
+
+            fn volatile() -> bool {
+                true
+            }
         }
     };
 }
@@ -137,6 +149,10 @@ macro_rules! boolean_scalar {
                     vec![],
                     LogicalTypeHandle::from(LogicalTypeId::Boolean),
                 )]
+            }
+
+            fn volatile() -> bool {
+                true
             }
         }
     };
@@ -178,6 +194,10 @@ macro_rules! double_double_scalar {
                     ],
                     LogicalTypeHandle::from(LogicalTypeId::Double),
                 )]
+            }
+
+            fn volatile() -> bool {
+                true
             }
         }
     };
@@ -364,15 +384,6 @@ double_double_scalar!(AddressLongitudeInRange, |min, max| fakeit::address::longi
 // Status code functions
 bigint_scalar!(StatusCodeSimple, || fakeit::status_code::simple() as i64);
 bigint_scalar!(StatusCodeGeneral, || fakeit::status_code::general() as i64);
-
-// Note: Functions currently produce duplicate values when used with generate_series()
-// This is because DuckDB optimizes zero-argument functions as constants.
-//
-// To fix this, we need to mark functions as VOLATILE using duckdb_scalar_function_set_volatile()
-// However, duckdb-rs doesn't currently expose this in its public API.
-//
-// TODO: Submit PR to duckdb-rs to add set_volatile() method to ScalarFunction
-// See: https://github.com/duckdb/duckdb-rs for contribution guidelines
 
 #[duckdb_entrypoint_c_api()]
 pub unsafe fn extension_entrypoint(con: Connection) -> Result<(), Box<dyn Error>> {
