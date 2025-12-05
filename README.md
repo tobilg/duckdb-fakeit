@@ -12,6 +12,13 @@ A DuckDB extension that provides fake data generation capabilities using the Rus
 
 ## Installation
 
+### From community extensions repo
+
+```sql
+INSTALL fakeit FROM community;
+LOAD fakeit;
+```
+
 ### From Source
 
 Clone the repo with submodules:
@@ -401,13 +408,9 @@ Template syntax: Use `{category.function}` patterns (e.g., `{name.first} {name.l
 
 ## Examples
 
-> **Note**: Due to a current limitation (see [Known Issues](#duplicate-values-with-generate_series-important)), functions used with `generate_series()` will currently produce duplicate values instead of unique values per row. This will be fixed in an upcoming release. For now, the examples below show the intended usage once the fix is applied.
-
 ### Generate Test Users
 
 ```sql
--- Note: Currently produces duplicate values (see Known Issues)
--- This example shows intended usage once VOLATILE flag support is added
 SELECT
     row_number() OVER () as id,
     fakeit_name_full() as name,
@@ -421,8 +424,6 @@ FROM generate_series(1, 100);
 ### Generate E-commerce Orders
 
 ```sql
--- Note: Currently produces duplicate values (see Known Issues)
--- This example shows intended usage once VOLATILE flag support is added
 SELECT
     fakeit_uuid_v4() as order_id,
     fakeit_name_full() as customer_name,
@@ -436,8 +437,6 @@ FROM generate_series(1, 1000);
 ### Generate Log Entries
 
 ```sql
--- Note: Currently produces duplicate values (see Known Issues)
--- This example shows intended usage once VOLATILE flag support is added
 SELECT
     fakeit_datetime_date() as timestamp,
     fakeit_internet_ipv4_address() as ip_address,
@@ -448,10 +447,8 @@ SELECT
 FROM generate_series(1, 10000);
 ```
 
-### Single-Row Usage (Works Now)
-
+### Single-Row Usage
 ```sql
--- Single-row queries work correctly and generate unique values each time
 SELECT
     fakeit_name_full() as name,
     fakeit_contact_email() as email,
@@ -462,8 +459,6 @@ SELECT
 ### Generate GeoJSON Data
 
 ```sql
--- Note: Currently produces duplicate values (see Known Issues)
--- This example shows intended usage once VOLATILE flag support is added
 SELECT json_object(
     'type', 'Feature',
     'geometry', json_object(
@@ -503,30 +498,6 @@ make clean_all
 DUCKDB_TEST_VERSION=v1.4.2 make configure
 make debug
 make test_debug
-```
-
-## Known Issues
-
-### Duplicate Values with generate_series() (IMPORTANT)
-
-**Current Limitation**: When using faker functions with `generate_series()` or in queries that expect unique values per row, the functions currently return the same value for all rows instead of generating unique values.
-
-**Root Cause**: DuckDB optimizes zero-argument scalar functions as constants. To prevent this, functions need to be marked as VOLATILE using `duckdb_scalar_function_set_volatile()`. However, the duckdb-rs library doesn't currently expose this flag in its public API.
-
-**Status**: We're working on a PR to duckdb-rs to add support for the volatile flag. Until then, the functions work correctly when called directly but will produce duplicate values in set-based operations.
-
-**Workaround**: For now, if you need unique values, you can:
-- Call the functions in separate single-row queries
-- Use DuckDB's built-in `uuid()` function for unique identifiers
-- Wait for the upcoming fix
-
-**Example of current behavior**:
-```sql
--- This will return the same name for all 10 rows (current limitation)
-SELECT fakeit_name_full() FROM generate_series(1, 10);
-
--- This works correctly (single row)
-SELECT fakeit_name_full();
 ```
 
 ### Local Testing with Python 3.14+
