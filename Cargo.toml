@@ -1,6 +1,6 @@
 [package]
 name = "fakeit"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 
 [lib]
@@ -20,9 +20,9 @@ path = "src/wasm_lib.rs"
 crate-type = ["staticlib"]
 
 [dependencies]
-duckdb = { git = "https://github.com/duckdb/duckdb-rs", rev = "749cff7a72a7b7a77ac14a4a2c1e641624974c34", features = ["vtab-loadable", "vscalar"] }
-duckdb-loadable-macros = "0.1.12"
-libduckdb-sys = { git = "https://github.com/duckdb/duckdb-rs", rev = "749cff7a72a7b7a77ac14a4a2c1e641624974c34", features = ["loadable-extension"] }
-fakeit = "1.3"
-serde = { version = "1.0.28", features = ["derive"] }
+duckdb = { version = "1.4.3", features = ["vtab-loadable", "vscalar"] }
+duckdb-loadable-macros = "0.1.13"
+libduckdb-sys = { version = "1.4.3", features = ["loadable-extension"] }
+fakeit = "1.4"
+serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.145"
