@@ -1,13 +1,7 @@
-extern crate duckdb;
-extern crate duckdb_loadable_macros;
-extern crate libduckdb_sys;
-
-use duckdb::{Connection, Result};
+use duckdb::{Connection, Result, duckdb_entrypoint_c_api};
 use duckdb::core::{DataChunkHandle, Inserter, LogicalTypeHandle, LogicalTypeId};
 use duckdb::vscalar::{ScalarFunctionSignature, VScalar};
 use duckdb::vtab::arrow::WritableVector;
-use duckdb_loadable_macros::duckdb_entrypoint_c_api;
-use libduckdb_sys as ffi;
 use std::error::Error;
 
 // Macro to create a zero-argument VARCHAR scalar function struct
