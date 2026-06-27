@@ -1,7 +1,7 @@
-use duckdb::{Connection, Result, duckdb_entrypoint_c_api};
 use duckdb::core::{DataChunkHandle, Inserter, LogicalTypeHandle, LogicalTypeId};
 use duckdb::vscalar::{ScalarFunctionSignature, VScalar};
 use duckdb::vtab::arrow::WritableVector;
+use duckdb::{duckdb_entrypoint_c_api, Connection, Result};
 use std::error::Error;
 
 // Macro to create a zero-argument VARCHAR scalar function struct
@@ -12,7 +12,7 @@ macro_rules! varchar_scalar {
         impl VScalar for $name {
             type State = ();
 
-            unsafe fn invoke(
+            fn invoke(
                 _state: &Self::State,
                 input: &mut DataChunkHandle,
                 output: &mut dyn WritableVector,
@@ -49,14 +49,15 @@ macro_rules! bigint_scalar {
         impl VScalar for $name {
             type State = ();
 
-            unsafe fn invoke(
+            fn invoke(
                 _state: &Self::State,
                 input: &mut DataChunkHandle,
                 output: &mut dyn WritableVector,
             ) -> Result<(), Box<dyn Error>> {
                 let len = input.len();
                 let mut output_vec = output.flat_vector();
-                let output_data = output_vec.as_mut_slice::<i64>();
+                // SAFETY: the scalar signature declares a BIGINT output vector.
+                let output_data = unsafe { output_vec.as_mut_slice::<i64>() };
 
                 for i in 0..len {
                     output_data[i] = $func() as i64;
@@ -86,14 +87,15 @@ macro_rules! double_scalar {
         impl VScalar for $name {
             type State = ();
 
-            unsafe fn invoke(
+            fn invoke(
                 _state: &Self::State,
                 input: &mut DataChunkHandle,
                 output: &mut dyn WritableVector,
             ) -> Result<(), Box<dyn Error>> {
                 let len = input.len();
                 let mut output_vec = output.flat_vector();
-                let output_data = output_vec.as_mut_slice::<f64>();
+                // SAFETY: the scalar signature declares a DOUBLE output vector.
+                let output_data = unsafe { output_vec.as_mut_slice::<f64>() };
 
                 for i in 0..len {
                     output_data[i] = $func();
@@ -123,14 +125,15 @@ macro_rules! boolean_scalar {
         impl VScalar for $name {
             type State = ();
 
-            unsafe fn invoke(
+            fn invoke(
                 _state: &Self::State,
                 input: &mut DataChunkHandle,
                 output: &mut dyn WritableVector,
             ) -> Result<(), Box<dyn Error>> {
                 let len = input.len();
                 let mut output_vec = output.flat_vector();
-                let output_data = output_vec.as_mut_slice::<bool>();
+                // SAFETY: the scalar signature declares a BOOLEAN output vector.
+                let output_data = unsafe { output_vec.as_mut_slice::<bool>() };
 
                 for i in 0..len {
                     output_data[i] = $func();
@@ -160,7 +163,7 @@ macro_rules! double_double_scalar {
         impl VScalar for $name {
             type State = ();
 
-            unsafe fn invoke(
+            fn invoke(
                 _state: &Self::State,
                 input: &mut DataChunkHandle,
                 output: &mut dyn WritableVector,
@@ -168,11 +171,13 @@ macro_rules! double_double_scalar {
                 let len = input.len();
                 let input1 = input.flat_vector(0);
                 let input2 = input.flat_vector(1);
-                let input_data1 = input1.as_slice::<f64>();
-                let input_data2 = input2.as_slice::<f64>();
+                // SAFETY: the scalar signature declares both inputs as DOUBLE vectors.
+                let input_data1 = unsafe { input1.as_slice::<f64>() };
+                let input_data2 = unsafe { input2.as_slice::<f64>() };
 
                 let mut output_vec = output.flat_vector();
-                let output_data = output_vec.as_mut_slice::<f64>();
+                // SAFETY: the scalar signature declares a DOUBLE output vector.
+                let output_data = unsafe { output_vec.as_mut_slice::<f64>() };
 
                 for i in 0..len {
                     output_data[i] = $func(input_data1[i], input_data2[i]);
@@ -271,7 +276,10 @@ varchar_scalar!(ColorRgb, || {
 // Currency functions
 varchar_scalar!(CurrencyShort, fakeit::currency::short);
 varchar_scalar!(CurrencyLong, fakeit::currency::long);
-varchar_scalar!(CurrencyPrice, || format!("{:.2}", fakeit::currency::price(0.0, 1000.0)));
+varchar_scalar!(CurrencyPrice, || format!(
+    "{:.2}",
+    fakeit::currency::price(0.0, 1000.0)
+));
 
 // DateTime functions
 varchar_scalar!(DateTimeMonth, fakeit::datetime::month);
@@ -284,8 +292,11 @@ varchar_scalar!(DateTimeYear, || fakeit::datetime::year().to_string());
 varchar_scalar!(DateTimeHour, || fakeit::datetime::hour().to_string());
 varchar_scalar!(DateTimeMinute, || fakeit::datetime::minute().to_string());
 varchar_scalar!(DateTimeSecond, || fakeit::datetime::second().to_string());
-varchar_scalar!(DateTimeNanosecond, || fakeit::datetime::nanosecond().to_string());
-varchar_scalar!(DateTimeTimezoneOffset, || fakeit::datetime::timezone_offset().to_string());
+varchar_scalar!(DateTimeNanosecond, || fakeit::datetime::nanosecond()
+    .to_string());
+varchar_scalar!(DateTimeTimezoneOffset, || {
+    fakeit::datetime::timezone_offset().to_string()
+});
 varchar_scalar!(DateTimeDate, || format!("{:?}", fakeit::datetime::date()));
 
 // File functions
@@ -303,7 +314,12 @@ varchar_scalar!(HackerIngverb, fakeit::hacker::ingverb);
 // Hipster functions
 varchar_scalar!(HipsterWord, fakeit::hipster::word);
 varchar_scalar!(HipsterSentence, || fakeit::hipster::sentence(5));
-varchar_scalar!(HipsterParagraph, || fakeit::hipster::paragraph(3, 5, 10, String::from(" ")));
+varchar_scalar!(HipsterParagraph, || fakeit::hipster::paragraph(
+    3,
+    5,
+    10,
+    String::from(" ")
+));
 
 // Image functions
 varchar_scalar!(ImageUrl, || fakeit::image::url(640, 480));
@@ -324,14 +340,19 @@ varchar_scalar!(LogLevelSyslog, fakeit::log_level::syslog);
 varchar_scalar!(LogLevelApache, fakeit::log_level::apache);
 
 // Password functions
-varchar_scalar!(PasswordGenerate, || fakeit::password::generate(true, true, true, 16));
+varchar_scalar!(PasswordGenerate, || fakeit::password::generate(
+    true, true, true, 16
+));
 
 // Payment functions
 varchar_scalar!(PaymentCreditCardType, fakeit::payment::credit_card_type);
 varchar_scalar!(PaymentCreditCardNumber, fakeit::payment::credit_card_number);
 varchar_scalar!(PaymentCreditCardExp, fakeit::payment::credit_card_exp);
 varchar_scalar!(PaymentCreditCardCvv, fakeit::payment::credit_card_cvv);
-varchar_scalar!(PaymentCreditCardLuhnNumber, fakeit::payment::credit_card_luhn_number);
+varchar_scalar!(
+    PaymentCreditCardLuhnNumber,
+    fakeit::payment::credit_card_luhn_number
+);
 
 // Person functions
 varchar_scalar!(PersonSsn, fakeit::person::ssn);
@@ -342,9 +363,18 @@ varchar_scalar!(UserAgentChrome, fakeit::user_agent::chrome);
 varchar_scalar!(UserAgentFirefox, fakeit::user_agent::firefox);
 varchar_scalar!(UserAgentSafari, fakeit::user_agent::safari);
 varchar_scalar!(UserAgentOpera, fakeit::user_agent::opera);
-varchar_scalar!(UserAgentLinuxPlatformToken, fakeit::user_agent::linux_platform_token);
-varchar_scalar!(UserAgentMacPlatformToken, fakeit::user_agent::mac_platform_token);
-varchar_scalar!(UserAgentWindowsPlatformToken, fakeit::user_agent::windows_platform_token);
+varchar_scalar!(
+    UserAgentLinuxPlatformToken,
+    fakeit::user_agent::linux_platform_token
+);
+varchar_scalar!(
+    UserAgentMacPlatformToken,
+    fakeit::user_agent::mac_platform_token
+);
+varchar_scalar!(
+    UserAgentWindowsPlatformToken,
+    fakeit::user_agent::windows_platform_token
+);
 varchar_scalar!(UserAgentRandomPlatform, fakeit::user_agent::random_platform);
 
 // Vehicle functions
@@ -357,12 +387,19 @@ varchar_scalar!(VehicleCarModel, fakeit::vehicle::car_model);
 // Words functions
 varchar_scalar!(WordsWord, fakeit::words::word);
 varchar_scalar!(WordsSentence, || fakeit::words::sentence(10));
-varchar_scalar!(WordsParagraph, || fakeit::words::paragraph(3, 5, 10, String::from(" ")));
+varchar_scalar!(WordsParagraph, || fakeit::words::paragraph(
+    3,
+    5,
+    10,
+    String::from(" ")
+));
 varchar_scalar!(WordsQuestion, fakeit::words::question);
 varchar_scalar!(WordsQuote, fakeit::words::quote);
 
 // Generator function
-varchar_scalar!(GeneratorGenerate, || fakeit::generator::generate("{firstname} {lastname}".to_string()));
+varchar_scalar!(GeneratorGenerate, || fakeit::generator::generate(
+    "{firstname} {lastname}".to_string()
+));
 
 // Boolean function
 boolean_scalar!(BoolRand, fakeit::bool_rand::bool);
@@ -372,8 +409,14 @@ double_scalar!(AddressLatitude, || fakeit::address::latitude() as f64);
 double_scalar!(AddressLongitude, || fakeit::address::longitude() as f64);
 
 // Parameterized functions
-double_double_scalar!(AddressLatitudeInRange, |min, max| fakeit::address::latitude_in_range(min as f32, max as f32) as f64);
-double_double_scalar!(AddressLongitudeInRange, |min, max| fakeit::address::longitude_in_range(min as f32, max as f32) as f64);
+double_double_scalar!(
+    AddressLatitudeInRange,
+    |min, max| fakeit::address::latitude_in_range(min as f32, max as f32) as f64
+);
+double_double_scalar!(
+    AddressLongitudeInRange,
+    |min, max| fakeit::address::longitude_in_range(min as f32, max as f32) as f64
+);
 
 // Status code functions
 bigint_scalar!(StatusCodeSimple, || fakeit::status_code::simple() as i64);
@@ -496,7 +539,9 @@ pub unsafe fn extension_entrypoint(con: Connection) -> Result<(), Box<dyn Error>
     con.register_scalar_function::<PaymentCreditCardNumber>("fakeit_payment_credit_card_number")?;
     con.register_scalar_function::<PaymentCreditCardExp>("fakeit_payment_credit_card_exp")?;
     con.register_scalar_function::<PaymentCreditCardCvv>("fakeit_payment_credit_card_cvv")?;
-    con.register_scalar_function::<PaymentCreditCardLuhnNumber>("fakeit_payment_credit_card_luhn_number")?;
+    con.register_scalar_function::<PaymentCreditCardLuhnNumber>(
+        "fakeit_payment_credit_card_luhn_number",
+    )?;
 
     con.register_scalar_function::<PersonSsn>("fakeit_person_ssn")?;
     con.register_scalar_function::<PersonGender>("fakeit_person_gender")?;
@@ -505,9 +550,15 @@ pub unsafe fn extension_entrypoint(con: Connection) -> Result<(), Box<dyn Error>
     con.register_scalar_function::<UserAgentFirefox>("fakeit_user_agent_firefox")?;
     con.register_scalar_function::<UserAgentSafari>("fakeit_user_agent_safari")?;
     con.register_scalar_function::<UserAgentOpera>("fakeit_user_agent_opera")?;
-    con.register_scalar_function::<UserAgentLinuxPlatformToken>("fakeit_user_agent_linux_platform_token")?;
-    con.register_scalar_function::<UserAgentMacPlatformToken>("fakeit_user_agent_mac_platform_token")?;
-    con.register_scalar_function::<UserAgentWindowsPlatformToken>("fakeit_user_agent_windows_platform_token")?;
+    con.register_scalar_function::<UserAgentLinuxPlatformToken>(
+        "fakeit_user_agent_linux_platform_token",
+    )?;
+    con.register_scalar_function::<UserAgentMacPlatformToken>(
+        "fakeit_user_agent_mac_platform_token",
+    )?;
+    con.register_scalar_function::<UserAgentWindowsPlatformToken>(
+        "fakeit_user_agent_windows_platform_token",
+    )?;
     con.register_scalar_function::<UserAgentRandomPlatform>("fakeit_user_agent_random_platform")?;
 
     con.register_scalar_function::<VehicleType>("fakeit_vehicle_vehicle_type")?;
