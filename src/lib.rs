@@ -1,202 +1,193 @@
-use duckdb::core::{DataChunkHandle, Inserter, LogicalTypeHandle, LogicalTypeId};
-use duckdb::vscalar::{ScalarFunctionSignature, VScalar};
-use duckdb::vtab::arrow::WritableVector;
-use duckdb::{duckdb_entrypoint_c_api, Connection, Result};
-use std::error::Error;
+use duckdb_loadable_macros::duckdb_entrypoint_c_api_v2;
+use duckdb_neo::{
+    connection::Context,
+    data_chunk::VectorCollection,
+    enums::{FunctionProperty, FunctionPropertyStability},
+    extension::Extension,
+    scalar::{ScalarCallbacks, ScalarFunctionBuilder},
+    signature::{FunctionDocumentationBuilder, FunctionParameter, SignatureBuilder},
+    vector::{Unknown, Vector},
+    DuckDBType, Result,
+};
 
-// Macro to create a zero-argument VARCHAR scalar function struct
+fn function_documentation(
+    name: &str,
+    category: &str,
+    description: &str,
+    example_arguments: &str,
+) -> FunctionDocumentationBuilder {
+    FunctionDocumentationBuilder::new()
+        .description(description)
+        .add_example("", format!("{name}({example_arguments})"))
+        .add_category("fakeit")
+        .add_category(category)
+}
+
+// Macro to create a zero-argument VARCHAR scalar function struct.
 macro_rules! varchar_scalar {
     ($name:ident, $func:expr) => {
         struct $name;
 
-        impl VScalar for $name {
-            type State = ();
+        impl ScalarCallbacks for $name {
+            type BindData = ();
+            type InitData = ();
 
-            fn invoke(
-                _state: &Self::State,
-                input: &mut DataChunkHandle,
-                output: &mut dyn WritableVector,
-            ) -> Result<(), Box<dyn Error>> {
-                let len = input.len();
-                let output_vec = output.flat_vector();
+            fn exec(
+                &self,
+                _bind_data: Option<&Self::BindData>,
+                _init_data: Option<&mut Self::InitData>,
+                _context: &Context,
+                input: &mut VectorCollection,
+                output: Vector<'_, Unknown>,
+            ) -> Result<()> {
+                let len = input.row_count()?;
+                let mut output = output.cast::<String>()?;
+                output.set_size(len)?;
+                let mut writer = output.writer()?;
 
                 for i in 0..len {
                     let result: String = $func();
-                    output_vec.insert(i, result.as_str());
+                    writer.set(i, Some(result.as_str()))?;
                 }
                 Ok(())
             }
+        }
 
-            fn signatures() -> Vec<ScalarFunctionSignature> {
-                vec![ScalarFunctionSignature::exact(
-                    vec![],
-                    LogicalTypeHandle::from(LogicalTypeId::Varchar),
-                )]
-            }
-
-            fn volatile() -> bool {
-                true
+        impl $name {
+            fn register(
+                extension: &Extension,
+                name: &str,
+                category: &str,
+                description: &str,
+            ) -> Result<()> {
+                ScalarFunctionBuilder::new(
+                    name,
+                    SignatureBuilder::new()
+                        .return_type(String::logical_type(extension)?)
+                        .documentation(function_documentation(name, category, description, "")),
+                    Self,
+                )
+                .set_property(FunctionProperty::Stability(
+                    FunctionPropertyStability::Volatile,
+                ))
+                .register(extension)
             }
         }
     };
 }
 
-// Macro to create a zero-argument BIGINT scalar function struct
-macro_rules! bigint_scalar {
-    ($name:ident, $func:expr) => {
+// Macro for zero-argument BIGINT, DOUBLE, and BOOLEAN scalar functions.
+macro_rules! primitive_scalar {
+    ($name:ident, $type:ty, $func:expr) => {
         struct $name;
 
-        impl VScalar for $name {
-            type State = ();
+        impl ScalarCallbacks for $name {
+            type BindData = ();
+            type InitData = ();
 
-            fn invoke(
-                _state: &Self::State,
-                input: &mut DataChunkHandle,
-                output: &mut dyn WritableVector,
-            ) -> Result<(), Box<dyn Error>> {
-                let len = input.len();
-                let mut output_vec = output.flat_vector();
-                // SAFETY: the scalar signature declares a BIGINT output vector.
-                let output_data = unsafe { output_vec.as_mut_slice::<i64>() };
+            fn exec(
+                &self,
+                _bind_data: Option<&Self::BindData>,
+                _init_data: Option<&mut Self::InitData>,
+                _context: &Context,
+                input: &mut VectorCollection,
+                output: Vector<'_, Unknown>,
+            ) -> Result<()> {
+                let len = input.row_count()?;
+                let mut output = output.cast::<$type>()?;
+                output.set_size(len)?;
+                let mut writer = output.writer()?;
 
                 for i in 0..len {
-                    output_data[i] = $func() as i64;
+                    writer.set(i, Some($func()))?;
                 }
                 Ok(())
             }
+        }
 
-            fn signatures() -> Vec<ScalarFunctionSignature> {
-                vec![ScalarFunctionSignature::exact(
-                    vec![],
-                    LogicalTypeHandle::from(LogicalTypeId::Bigint),
-                )]
-            }
-
-            fn volatile() -> bool {
-                true
+        impl $name {
+            fn register(
+                extension: &Extension,
+                name: &str,
+                category: &str,
+                description: &str,
+            ) -> Result<()> {
+                ScalarFunctionBuilder::new(
+                    name,
+                    SignatureBuilder::new()
+                        .return_type(<$type>::logical_type(extension)?)
+                        .documentation(function_documentation(name, category, description, "")),
+                    Self,
+                )
+                .set_property(FunctionProperty::Stability(
+                    FunctionPropertyStability::Volatile,
+                ))
+                .register(extension)
             }
         }
     };
 }
 
-// Macro to create a zero-argument DOUBLE scalar function struct
-macro_rules! double_scalar {
-    ($name:ident, $func:expr) => {
-        struct $name;
-
-        impl VScalar for $name {
-            type State = ();
-
-            fn invoke(
-                _state: &Self::State,
-                input: &mut DataChunkHandle,
-                output: &mut dyn WritableVector,
-            ) -> Result<(), Box<dyn Error>> {
-                let len = input.len();
-                let mut output_vec = output.flat_vector();
-                // SAFETY: the scalar signature declares a DOUBLE output vector.
-                let output_data = unsafe { output_vec.as_mut_slice::<f64>() };
-
-                for i in 0..len {
-                    output_data[i] = $func();
-                }
-                Ok(())
-            }
-
-            fn signatures() -> Vec<ScalarFunctionSignature> {
-                vec![ScalarFunctionSignature::exact(
-                    vec![],
-                    LogicalTypeHandle::from(LogicalTypeId::Double),
-                )]
-            }
-
-            fn volatile() -> bool {
-                true
-            }
-        }
-    };
-}
-
-// Macro to create a zero-argument BOOLEAN scalar function struct
-macro_rules! boolean_scalar {
-    ($name:ident, $func:expr) => {
-        struct $name;
-
-        impl VScalar for $name {
-            type State = ();
-
-            fn invoke(
-                _state: &Self::State,
-                input: &mut DataChunkHandle,
-                output: &mut dyn WritableVector,
-            ) -> Result<(), Box<dyn Error>> {
-                let len = input.len();
-                let mut output_vec = output.flat_vector();
-                // SAFETY: the scalar signature declares a BOOLEAN output vector.
-                let output_data = unsafe { output_vec.as_mut_slice::<bool>() };
-
-                for i in 0..len {
-                    output_data[i] = $func();
-                }
-                Ok(())
-            }
-
-            fn signatures() -> Vec<ScalarFunctionSignature> {
-                vec![ScalarFunctionSignature::exact(
-                    vec![],
-                    LogicalTypeHandle::from(LogicalTypeId::Boolean),
-                )]
-            }
-
-            fn volatile() -> bool {
-                true
-            }
-        }
-    };
-}
-
-// Macro to create a two-DOUBLE-argument DOUBLE scalar function struct
+// Macro to create a two-DOUBLE-argument DOUBLE scalar function struct.
 macro_rules! double_double_scalar {
     ($name:ident, $func:expr) => {
         struct $name;
 
-        impl VScalar for $name {
-            type State = ();
+        impl ScalarCallbacks for $name {
+            type BindData = ();
+            type InitData = ();
 
-            fn invoke(
-                _state: &Self::State,
-                input: &mut DataChunkHandle,
-                output: &mut dyn WritableVector,
-            ) -> Result<(), Box<dyn Error>> {
-                let len = input.len();
-                let input1 = input.flat_vector(0);
-                let input2 = input.flat_vector(1);
-                // SAFETY: the scalar signature declares both inputs as DOUBLE vectors.
-                let input_data1 = unsafe { input1.as_slice::<f64>() };
-                let input_data2 = unsafe { input2.as_slice::<f64>() };
-
-                let mut output_vec = output.flat_vector();
-                // SAFETY: the scalar signature declares a DOUBLE output vector.
-                let output_data = unsafe { output_vec.as_mut_slice::<f64>() };
+            fn exec(
+                &self,
+                _bind_data: Option<&Self::BindData>,
+                _init_data: Option<&mut Self::InitData>,
+                _context: &Context,
+                input: &mut VectorCollection,
+                output: Vector<'_, Unknown>,
+            ) -> Result<()> {
+                let len = input.row_count()?;
+                let min = input.get_vector_at::<f64>(0)?.reader()?;
+                let max = input.get_vector_at::<f64>(1)?.reader()?;
+                let mut output = output.cast::<f64>()?;
+                output.set_size(len)?;
+                let mut writer = output.writer()?;
 
                 for i in 0..len {
-                    output_data[i] = $func(input_data1[i], input_data2[i]);
+                    let value = match (min.get(i)?, max.get(i)?) {
+                        (Some(min), Some(max)) => Some(($func)(*min, *max)),
+                        _ => None,
+                    };
+                    writer.set(i, value)?;
                 }
                 Ok(())
             }
+        }
 
-            fn signatures() -> Vec<ScalarFunctionSignature> {
-                vec![ScalarFunctionSignature::exact(
-                    vec![
-                        LogicalTypeHandle::from(LogicalTypeId::Double),
-                        LogicalTypeHandle::from(LogicalTypeId::Double),
-                    ],
-                    LogicalTypeHandle::from(LogicalTypeId::Double),
-                )]
-            }
-
-            fn volatile() -> bool {
-                true
+        impl $name {
+            fn register(
+                extension: &Extension,
+                name: &str,
+                category: &str,
+                description: &str,
+            ) -> Result<()> {
+                ScalarFunctionBuilder::new(
+                    name,
+                    SignatureBuilder::new()
+                        .param(FunctionParameter::new::<f64>("min"))
+                        .param(FunctionParameter::new::<f64>("max"))
+                        .return_type(f64::logical_type(extension)?)
+                        .documentation(function_documentation(
+                            name,
+                            category,
+                            description,
+                            "-10.0, 10.0",
+                        )),
+                    Self,
+                )
+                .set_property(FunctionProperty::Stability(
+                    FunctionPropertyStability::Volatile,
+                ))
+                .register(extension)
             }
         }
     };
@@ -402,11 +393,12 @@ varchar_scalar!(GeneratorGenerate, || fakeit::generator::generate(
 ));
 
 // Boolean function
-boolean_scalar!(BoolRand, fakeit::bool_rand::bool);
+primitive_scalar!(BoolRand, bool, fakeit::bool_rand::bool);
 
 // Numeric functions
-double_scalar!(AddressLatitude, || fakeit::address::latitude() as f64);
-double_scalar!(AddressLongitude, || fakeit::address::longitude() as f64);
+primitive_scalar!(AddressLatitude, f64, || fakeit::address::latitude() as f64);
+primitive_scalar!(AddressLongitude, f64, || fakeit::address::longitude()
+    as f64);
 
 // Parameterized functions
 double_double_scalar!(
@@ -419,166 +411,735 @@ double_double_scalar!(
 );
 
 // Status code functions
-bigint_scalar!(StatusCodeSimple, || fakeit::status_code::simple() as i64);
-bigint_scalar!(StatusCodeGeneral, || fakeit::status_code::general() as i64);
+primitive_scalar!(StatusCodeSimple, i64, || fakeit::status_code::simple()
+    as i64);
+primitive_scalar!(StatusCodeGeneral, i64, || fakeit::status_code::general()
+    as i64);
 
-#[duckdb_entrypoint_c_api()]
-pub unsafe fn extension_entrypoint(con: Connection) -> Result<(), Box<dyn Error>> {
+#[duckdb_entrypoint_c_api_v2(extension_name = "fakeit", api_version = "v2.0.0")]
+pub fn extension_entrypoint(extension: &Extension) -> Result<()> {
     // Register all address functions
-    con.register_scalar_function::<AddressStreet>("fakeit_address_street")?;
-    con.register_scalar_function::<AddressCity>("fakeit_address_city")?;
-    con.register_scalar_function::<AddressState>("fakeit_address_state")?;
-    con.register_scalar_function::<AddressZip>("fakeit_address_zip")?;
-    con.register_scalar_function::<AddressCountry>("fakeit_address_country")?;
-    con.register_scalar_function::<AddressStreetNumber>("fakeit_address_street_number")?;
-    con.register_scalar_function::<AddressStreetPrefix>("fakeit_address_street_prefix")?;
-    con.register_scalar_function::<AddressStreetName>("fakeit_address_street_name")?;
-    con.register_scalar_function::<AddressStreetSuffix>("fakeit_address_street_suffix")?;
-    con.register_scalar_function::<AddressStateAbr>("fakeit_address_state_abr")?;
-    con.register_scalar_function::<AddressCountryAbr>("fakeit_address_country_abr")?;
-    con.register_scalar_function::<AddressLatitude>("fakeit_address_latitude")?;
-    con.register_scalar_function::<AddressLongitude>("fakeit_address_longitude")?;
-    con.register_scalar_function::<AddressLatitudeInRange>("fakeit_address_latitude_in_range")?;
-    con.register_scalar_function::<AddressLongitudeInRange>("fakeit_address_longitude_in_range")?;
+    AddressStreet::register(
+        extension,
+        "fakeit_address_street",
+        "address",
+        "Generates a random street address.",
+    )?;
+    AddressCity::register(
+        extension,
+        "fakeit_address_city",
+        "address",
+        "Generates a random city name.",
+    )?;
+    AddressState::register(
+        extension,
+        "fakeit_address_state",
+        "address",
+        "Generates a random state name.",
+    )?;
+    AddressZip::register(
+        extension,
+        "fakeit_address_zip",
+        "address",
+        "Generates a random postal code.",
+    )?;
+    AddressCountry::register(
+        extension,
+        "fakeit_address_country",
+        "address",
+        "Generates a random country name.",
+    )?;
+    AddressStreetNumber::register(
+        extension,
+        "fakeit_address_street_number",
+        "address",
+        "Generates a random street number as text.",
+    )?;
+    AddressStreetPrefix::register(
+        extension,
+        "fakeit_address_street_prefix",
+        "address",
+        "Generates a random street prefix, such as North or East.",
+    )?;
+    AddressStreetName::register(
+        extension,
+        "fakeit_address_street_name",
+        "address",
+        "Generates a random street name.",
+    )?;
+    AddressStreetSuffix::register(
+        extension,
+        "fakeit_address_street_suffix",
+        "address",
+        "Generates a random street suffix, such as Street or Avenue.",
+    )?;
+    AddressStateAbr::register(
+        extension,
+        "fakeit_address_state_abr",
+        "address",
+        "Generates a random state abbreviation.",
+    )?;
+    AddressCountryAbr::register(
+        extension,
+        "fakeit_address_country_abr",
+        "address",
+        "Generates a random country abbreviation.",
+    )?;
+    AddressLatitude::register(
+        extension,
+        "fakeit_address_latitude",
+        "address",
+        "Generates a random latitude coordinate between -90 and 90 degrees.",
+    )?;
+    AddressLongitude::register(
+        extension,
+        "fakeit_address_longitude",
+        "address",
+        "Generates a random longitude coordinate between -180 and 180 degrees.",
+    )?;
+    AddressLatitudeInRange::register(extension, "fakeit_address_latitude_in_range", "address", "Generates a latitude using min and max bounds in degrees. Returns NULL if either bound is NULL; invalid geographic bounds fall back to an unrestricted coordinate. The upstream random generator can return values outside the requested interval.")?;
+    AddressLongitudeInRange::register(extension, "fakeit_address_longitude_in_range", "address", "Generates a longitude using min and max bounds in degrees. Returns NULL if either bound is NULL; invalid geographic bounds fall back to an unrestricted coordinate. The upstream random generator can return values outside the requested interval.")?;
 
-    con.register_scalar_function::<NameFirst>("fakeit_name_first")?;
-    con.register_scalar_function::<NameLast>("fakeit_name_last")?;
-    con.register_scalar_function::<NameFull>("fakeit_name_full")?;
-    con.register_scalar_function::<NamePrefix>("fakeit_name_prefix")?;
-    con.register_scalar_function::<NameSuffix>("fakeit_name_suffix")?;
+    NameFirst::register(
+        extension,
+        "fakeit_name_first",
+        "name",
+        "Generates a random first name.",
+    )?;
+    NameLast::register(
+        extension,
+        "fakeit_name_last",
+        "name",
+        "Generates a random last name.",
+    )?;
+    NameFull::register(
+        extension,
+        "fakeit_name_full",
+        "name",
+        "Generates a random full name with a first and last name.",
+    )?;
+    NamePrefix::register(
+        extension,
+        "fakeit_name_prefix",
+        "name",
+        "Generates a random name prefix, such as Mr. or Dr.",
+    )?;
+    NameSuffix::register(
+        extension,
+        "fakeit_name_suffix",
+        "name",
+        "Generates a random name suffix, such as Jr. or III.",
+    )?;
 
-    con.register_scalar_function::<CompanyCompany>("fakeit_company_company")?;
-    con.register_scalar_function::<CompanyBs>("fakeit_company_bs")?;
-    con.register_scalar_function::<CompanySuffix>("fakeit_company_company_suffix")?;
-    con.register_scalar_function::<CompanyBuzzword>("fakeit_company_buzzword")?;
+    CompanyCompany::register(
+        extension,
+        "fakeit_company_company",
+        "company",
+        "Generates a random company name.",
+    )?;
+    CompanyBs::register(
+        extension,
+        "fakeit_company_bs",
+        "company",
+        "Generates a random business statement.",
+    )?;
+    CompanySuffix::register(
+        extension,
+        "fakeit_company_company_suffix",
+        "company",
+        "Generates a random company suffix, such as Inc or LLC.",
+    )?;
+    CompanyBuzzword::register(
+        extension,
+        "fakeit_company_buzzword",
+        "company",
+        "Generates a random business buzzword.",
+    )?;
 
-    con.register_scalar_function::<ContactEmail>("fakeit_contact_email")?;
-    con.register_scalar_function::<ContactPhone>("fakeit_contact_phone")?;
-    con.register_scalar_function::<ContactPhoneFormatted>("fakeit_contact_phone_formatted")?;
+    ContactEmail::register(
+        extension,
+        "fakeit_contact_email",
+        "contact",
+        "Generates a random email address for test data.",
+    )?;
+    ContactPhone::register(
+        extension,
+        "fakeit_contact_phone",
+        "contact",
+        "Generates a random unformatted phone number.",
+    )?;
+    ContactPhoneFormatted::register(
+        extension,
+        "fakeit_contact_phone_formatted",
+        "contact",
+        "Generates a random formatted phone number.",
+    )?;
 
-    con.register_scalar_function::<InternetIpv4Address>("fakeit_internet_ipv4_address")?;
-    con.register_scalar_function::<InternetIpv6Address>("fakeit_internet_ipv6_address")?;
-    con.register_scalar_function::<InternetDomainName>("fakeit_internet_domain_name")?;
-    con.register_scalar_function::<InternetDomainSuffix>("fakeit_internet_domain_suffix")?;
-    con.register_scalar_function::<InternetUsername>("fakeit_internet_username")?;
-    con.register_scalar_function::<InternetHttpMethod>("fakeit_internet_http_method")?;
-    con.register_scalar_function::<InternetMacAddress>("fakeit_internet_mac_address")?;
+    InternetIpv4Address::register(
+        extension,
+        "fakeit_internet_ipv4_address",
+        "internet",
+        "Generates a random IPv4 address.",
+    )?;
+    InternetIpv6Address::register(
+        extension,
+        "fakeit_internet_ipv6_address",
+        "internet",
+        "Generates a random IPv6 address.",
+    )?;
+    InternetDomainName::register(
+        extension,
+        "fakeit_internet_domain_name",
+        "internet",
+        "Generates a random domain name.",
+    )?;
+    InternetDomainSuffix::register(
+        extension,
+        "fakeit_internet_domain_suffix",
+        "internet",
+        "Generates a random domain suffix, such as com or org.",
+    )?;
+    InternetUsername::register(
+        extension,
+        "fakeit_internet_username",
+        "internet",
+        "Generates a random username.",
+    )?;
+    InternetHttpMethod::register(
+        extension,
+        "fakeit_internet_http_method",
+        "internet",
+        "Selects a random HTTP method, such as GET or POST.",
+    )?;
+    InternetMacAddress::register(
+        extension,
+        "fakeit_internet_mac_address",
+        "internet",
+        "Generates a random MAC address.",
+    )?;
 
-    con.register_scalar_function::<UuidV1>("fakeit_uuid_v1")?;
-    con.register_scalar_function::<UuidV4>("fakeit_uuid_v4")?;
+    UuidV1::register(
+        extension,
+        "fakeit_uuid_v1",
+        "uuid",
+        "Generates a version 1 UUID using the current time and a fixed node identifier.",
+    )?;
+    UuidV4::register(
+        extension,
+        "fakeit_uuid_v4",
+        "uuid",
+        "Generates a random version 4 UUID.",
+    )?;
 
-    con.register_scalar_function::<AnimalPetName>("fakeit_animal_pet_name")?;
-    con.register_scalar_function::<AnimalAnimal>("fakeit_animal_animal")?;
-    con.register_scalar_function::<AnimalFarm>("fakeit_animal_farm")?;
-    con.register_scalar_function::<AnimalCat>("fakeit_animal_cat")?;
-    con.register_scalar_function::<AnimalDog>("fakeit_animal_dog")?;
+    AnimalPetName::register(
+        extension,
+        "fakeit_animal_pet_name",
+        "animal",
+        "Generates a random pet name.",
+    )?;
+    AnimalAnimal::register(
+        extension,
+        "fakeit_animal_animal",
+        "animal",
+        "Selects a random animal name.",
+    )?;
+    AnimalFarm::register(
+        extension,
+        "fakeit_animal_farm",
+        "animal",
+        "Selects a random farm animal.",
+    )?;
+    AnimalCat::register(
+        extension,
+        "fakeit_animal_cat",
+        "animal",
+        "Selects a random cat breed.",
+    )?;
+    AnimalDog::register(
+        extension,
+        "fakeit_animal_dog",
+        "animal",
+        "Selects a random dog breed.",
+    )?;
 
-    con.register_scalar_function::<BeerName>("fakeit_beer_name")?;
-    con.register_scalar_function::<BeerStyle>("fakeit_beer_style")?;
-    con.register_scalar_function::<BeerHop>("fakeit_beer_hop")?;
-    con.register_scalar_function::<BeerYeast>("fakeit_beer_yeast")?;
-    con.register_scalar_function::<BeerMalt>("fakeit_beer_malt")?;
-    con.register_scalar_function::<BeerIbu>("fakeit_beer_ibu")?;
-    con.register_scalar_function::<BeerAlcohol>("fakeit_beer_alcohol")?;
-    con.register_scalar_function::<BeerBlg>("fakeit_beer_blg")?;
+    BeerName::register(
+        extension,
+        "fakeit_beer_name",
+        "beer",
+        "Selects a random beer name.",
+    )?;
+    BeerStyle::register(
+        extension,
+        "fakeit_beer_style",
+        "beer",
+        "Selects a random beer style.",
+    )?;
+    BeerHop::register(
+        extension,
+        "fakeit_beer_hop",
+        "beer",
+        "Selects a random hop variety.",
+    )?;
+    BeerYeast::register(
+        extension,
+        "fakeit_beer_yeast",
+        "beer",
+        "Selects a random yeast type.",
+    )?;
+    BeerMalt::register(
+        extension,
+        "fakeit_beer_malt",
+        "beer",
+        "Selects a random malt variety.",
+    )?;
+    BeerIbu::register(
+        extension,
+        "fakeit_beer_ibu",
+        "beer",
+        "Generates a random beer bitterness value as text with an IBU suffix.",
+    )?;
+    BeerAlcohol::register(
+        extension,
+        "fakeit_beer_alcohol",
+        "beer",
+        "Generates a random alcohol percentage as text with a percent sign.",
+    )?;
+    BeerBlg::register(
+        extension,
+        "fakeit_beer_blg",
+        "beer",
+        "Generates a random beer gravity value as text in degrees Balling.",
+    )?;
 
-    con.register_scalar_function::<ColorFull>("fakeit_color_full")?;
-    con.register_scalar_function::<ColorHex>("fakeit_color_hex")?;
-    con.register_scalar_function::<ColorSafe>("fakeit_color_safe")?;
-    con.register_scalar_function::<ColorRgb>("fakeit_color_rgb")?;
+    ColorFull::register(
+        extension,
+        "fakeit_color_full",
+        "color",
+        "Selects a random color name.",
+    )?;
+    ColorHex::register(
+        extension,
+        "fakeit_color_hex",
+        "color",
+        "Generates a random hexadecimal color code.",
+    )?;
+    ColorSafe::register(
+        extension,
+        "fakeit_color_safe",
+        "color",
+        "Selects a random web-safe color name.",
+    )?;
+    ColorRgb::register(
+        extension,
+        "fakeit_color_rgb",
+        "color",
+        "Generates a random RGB color as text in the form [R, G, B].",
+    )?;
 
-    con.register_scalar_function::<CurrencyShort>("fakeit_currency_short")?;
-    con.register_scalar_function::<CurrencyLong>("fakeit_currency_long")?;
-    con.register_scalar_function::<CurrencyPrice>("fakeit_currency_price")?;
+    CurrencyShort::register(
+        extension,
+        "fakeit_currency_short",
+        "currency",
+        "Selects a random currency code, such as USD.",
+    )?;
+    CurrencyLong::register(
+        extension,
+        "fakeit_currency_long",
+        "currency",
+        "Selects a random currency name, such as US Dollar.",
+    )?;
+    CurrencyPrice::register(extension, "fakeit_currency_price", "currency", "Generates a price using fixed bounds of 0 and 1000, formatted as text with two decimal places.")?;
 
-    con.register_scalar_function::<DateTimeMonth>("fakeit_datetime_month")?;
-    con.register_scalar_function::<DateTimeDay>("fakeit_datetime_day")?;
-    con.register_scalar_function::<DateTimeWeekDay>("fakeit_datetime_week_day")?;
-    con.register_scalar_function::<DateTimeTimezone>("fakeit_datetime_timezone")?;
-    con.register_scalar_function::<DateTimeTimezoneFull>("fakeit_datetime_timezone_full")?;
-    con.register_scalar_function::<DateTimeTimezoneAbv>("fakeit_datetime_timezone_abv")?;
-    con.register_scalar_function::<DateTimeYear>("fakeit_datetime_year")?;
-    con.register_scalar_function::<DateTimeHour>("fakeit_datetime_hour")?;
-    con.register_scalar_function::<DateTimeMinute>("fakeit_datetime_minute")?;
-    con.register_scalar_function::<DateTimeSecond>("fakeit_datetime_second")?;
-    con.register_scalar_function::<DateTimeNanosecond>("fakeit_datetime_nanosecond")?;
-    con.register_scalar_function::<DateTimeTimezoneOffset>("fakeit_datetime_timezone_offset")?;
-    con.register_scalar_function::<DateTimeDate>("fakeit_datetime_date")?;
+    DateTimeMonth::register(
+        extension,
+        "fakeit_datetime_month",
+        "datetime",
+        "Generates a random month number as text.",
+    )?;
+    DateTimeDay::register(
+        extension,
+        "fakeit_datetime_day",
+        "datetime",
+        "Generates a random day-of-month number as text.",
+    )?;
+    DateTimeWeekDay::register(
+        extension,
+        "fakeit_datetime_week_day",
+        "datetime",
+        "Generates a random numeric weekday value as text.",
+    )?;
+    DateTimeTimezone::register(
+        extension,
+        "fakeit_datetime_timezone",
+        "datetime",
+        "Selects a random timezone name.",
+    )?;
+    DateTimeTimezoneFull::register(
+        extension,
+        "fakeit_datetime_timezone_full",
+        "datetime",
+        "Selects a random full timezone description.",
+    )?;
+    DateTimeTimezoneAbv::register(
+        extension,
+        "fakeit_datetime_timezone_abv",
+        "datetime",
+        "Selects a random timezone abbreviation.",
+    )?;
+    DateTimeYear::register(
+        extension,
+        "fakeit_datetime_year",
+        "datetime",
+        "Generates a random year as text.",
+    )?;
+    DateTimeHour::register(
+        extension,
+        "fakeit_datetime_hour",
+        "datetime",
+        "Generates a random hour as text.",
+    )?;
+    DateTimeMinute::register(
+        extension,
+        "fakeit_datetime_minute",
+        "datetime",
+        "Generates a random minute as text.",
+    )?;
+    DateTimeSecond::register(
+        extension,
+        "fakeit_datetime_second",
+        "datetime",
+        "Generates a random second as text.",
+    )?;
+    DateTimeNanosecond::register(
+        extension,
+        "fakeit_datetime_nanosecond",
+        "datetime",
+        "Generates a random nanosecond value as text.",
+    )?;
+    DateTimeTimezoneOffset::register(
+        extension,
+        "fakeit_datetime_timezone_offset",
+        "datetime",
+        "Selects a random timezone offset as text.",
+    )?;
+    DateTimeDate::register(
+        extension,
+        "fakeit_datetime_date",
+        "datetime",
+        "Returns a generated date as text with secs and nsecs fields.",
+    )?;
 
-    con.register_scalar_function::<FileExtension>("fakeit_file_extension")?;
-    con.register_scalar_function::<FileMimeType>("fakeit_file_mime_type")?;
+    FileExtension::register(
+        extension,
+        "fakeit_file_extension",
+        "file",
+        "Selects a random file extension.",
+    )?;
+    FileMimeType::register(
+        extension,
+        "fakeit_file_mime_type",
+        "file",
+        "Selects a random MIME type.",
+    )?;
 
-    con.register_scalar_function::<HackerPhrase>("fakeit_hacker_phrase")?;
-    con.register_scalar_function::<HackerAbbreviation>("fakeit_hacker_abbreviation")?;
-    con.register_scalar_function::<HackerAdjective>("fakeit_hacker_adjective")?;
-    con.register_scalar_function::<HackerNoun>("fakeit_hacker_noun")?;
-    con.register_scalar_function::<HackerVerb>("fakeit_hacker_verb")?;
-    con.register_scalar_function::<HackerIngverb>("fakeit_hacker_ingverb")?;
+    HackerPhrase::register(
+        extension,
+        "fakeit_hacker_phrase",
+        "hacker",
+        "Generates a random hacker-style phrase.",
+    )?;
+    HackerAbbreviation::register(
+        extension,
+        "fakeit_hacker_abbreviation",
+        "hacker",
+        "Selects a random technical abbreviation.",
+    )?;
+    HackerAdjective::register(
+        extension,
+        "fakeit_hacker_adjective",
+        "hacker",
+        "Selects a random technical adjective.",
+    )?;
+    HackerNoun::register(
+        extension,
+        "fakeit_hacker_noun",
+        "hacker",
+        "Selects a random technical noun.",
+    )?;
+    HackerVerb::register(
+        extension,
+        "fakeit_hacker_verb",
+        "hacker",
+        "Selects a random technical verb.",
+    )?;
+    HackerIngverb::register(
+        extension,
+        "fakeit_hacker_ingverb",
+        "hacker",
+        "Selects a random technical verb ending in -ing.",
+    )?;
 
-    con.register_scalar_function::<HipsterWord>("fakeit_hipster_word")?;
-    con.register_scalar_function::<HipsterSentence>("fakeit_hipster_sentence")?;
-    con.register_scalar_function::<HipsterParagraph>("fakeit_hipster_paragraph")?;
+    HipsterWord::register(
+        extension,
+        "fakeit_hipster_word",
+        "hipster",
+        "Selects a random hipster word.",
+    )?;
+    HipsterSentence::register(
+        extension,
+        "fakeit_hipster_sentence",
+        "hipster",
+        "Generates a five-word sentence using the upstream hipster sentence generator.",
+    )?;
+    HipsterParagraph::register(
+        extension,
+        "fakeit_hipster_paragraph",
+        "hipster",
+        "Generates three paragraphs of five ten-word sentences each, joined with spaces.",
+    )?;
 
-    con.register_scalar_function::<ImageUrl>("fakeit_image_url")?;
+    ImageUrl::register(
+        extension,
+        "fakeit_image_url",
+        "image",
+        "Returns a picsum.photos placeholder image URL with fixed dimensions of 640 by 480 pixels.",
+    )?;
 
-    con.register_scalar_function::<JobTitle>("fakeit_job_title")?;
-    con.register_scalar_function::<JobDescriptor>("fakeit_job_descriptor")?;
-    con.register_scalar_function::<JobLevel>("fakeit_job_level")?;
+    JobTitle::register(
+        extension,
+        "fakeit_job_title",
+        "job",
+        "Selects a random job title.",
+    )?;
+    JobDescriptor::register(
+        extension,
+        "fakeit_job_descriptor",
+        "job",
+        "Selects a random job descriptor.",
+    )?;
+    JobLevel::register(
+        extension,
+        "fakeit_job_level",
+        "job",
+        "Selects a random job level.",
+    )?;
 
-    con.register_scalar_function::<LanguageRandom>("fakeit_language_random")?;
-    con.register_scalar_function::<LanguageAbbreviation>("fakeit_language_abbreviation")?;
-    con.register_scalar_function::<LanguageProgramming>("fakeit_language_programming")?;
+    LanguageRandom::register(
+        extension,
+        "fakeit_language_random",
+        "language",
+        "Selects a random language name.",
+    )?;
+    LanguageAbbreviation::register(
+        extension,
+        "fakeit_language_abbreviation",
+        "language",
+        "Selects a random language abbreviation.",
+    )?;
+    LanguageProgramming::register(
+        extension,
+        "fakeit_language_programming",
+        "language",
+        "Selects a random programming language.",
+    )?;
 
-    con.register_scalar_function::<LogLevelGeneral>("fakeit_log_level_general")?;
-    con.register_scalar_function::<LogLevelSyslog>("fakeit_log_level_syslog")?;
-    con.register_scalar_function::<LogLevelApache>("fakeit_log_level_apache")?;
+    LogLevelGeneral::register(
+        extension,
+        "fakeit_log_level_general",
+        "log_level",
+        "Selects a random general log level.",
+    )?;
+    LogLevelSyslog::register(
+        extension,
+        "fakeit_log_level_syslog",
+        "log_level",
+        "Selects a random syslog severity level.",
+    )?;
+    LogLevelApache::register(
+        extension,
+        "fakeit_log_level_apache",
+        "log_level",
+        "Selects a random Apache log level.",
+    )?;
 
-    con.register_scalar_function::<PasswordGenerate>("fakeit_password_generate")?;
+    PasswordGenerate::register(extension, "fakeit_password_generate", "password", "Generates a test password from letters, digits, and special characters using fixed generator settings.")?;
 
-    con.register_scalar_function::<PaymentCreditCardType>("fakeit_payment_credit_card_type")?;
-    con.register_scalar_function::<PaymentCreditCardNumber>("fakeit_payment_credit_card_number")?;
-    con.register_scalar_function::<PaymentCreditCardExp>("fakeit_payment_credit_card_exp")?;
-    con.register_scalar_function::<PaymentCreditCardCvv>("fakeit_payment_credit_card_cvv")?;
-    con.register_scalar_function::<PaymentCreditCardLuhnNumber>(
+    PaymentCreditCardType::register(
+        extension,
+        "fakeit_payment_credit_card_type",
+        "payment",
+        "Selects a random credit card type for test data.",
+    )?;
+    PaymentCreditCardNumber::register(
+        extension,
+        "fakeit_payment_credit_card_number",
+        "payment",
+        "Generates a random credit card number for test data.",
+    )?;
+    PaymentCreditCardExp::register(
+        extension,
+        "fakeit_payment_credit_card_exp",
+        "payment",
+        "Generates a test credit card expiration date in MM/YY format.",
+    )?;
+    PaymentCreditCardCvv::register(
+        extension,
+        "fakeit_payment_credit_card_cvv",
+        "payment",
+        "Generates a three-digit credit card verification code for test data.",
+    )?;
+    PaymentCreditCardLuhnNumber::register(
+        extension,
         "fakeit_payment_credit_card_luhn_number",
+        "payment",
+        "Generates a test card number using the upstream Luhn-based generator.",
     )?;
 
-    con.register_scalar_function::<PersonSsn>("fakeit_person_ssn")?;
-    con.register_scalar_function::<PersonGender>("fakeit_person_gender")?;
+    PersonSsn::register(
+        extension,
+        "fakeit_person_ssn",
+        "person",
+        "Generates a random Social Security number for test data.",
+    )?;
+    PersonGender::register(
+        extension,
+        "fakeit_person_gender",
+        "person",
+        "Selects a random gender value from the upstream dataset.",
+    )?;
 
-    con.register_scalar_function::<UserAgentChrome>("fakeit_user_agent_chrome")?;
-    con.register_scalar_function::<UserAgentFirefox>("fakeit_user_agent_firefox")?;
-    con.register_scalar_function::<UserAgentSafari>("fakeit_user_agent_safari")?;
-    con.register_scalar_function::<UserAgentOpera>("fakeit_user_agent_opera")?;
-    con.register_scalar_function::<UserAgentLinuxPlatformToken>(
+    UserAgentChrome::register(
+        extension,
+        "fakeit_user_agent_chrome",
+        "user_agent",
+        "Generates a random Chrome user-agent string.",
+    )?;
+    UserAgentFirefox::register(
+        extension,
+        "fakeit_user_agent_firefox",
+        "user_agent",
+        "Generates a random Firefox user-agent string.",
+    )?;
+    UserAgentSafari::register(
+        extension,
+        "fakeit_user_agent_safari",
+        "user_agent",
+        "Generates a random Safari user-agent string.",
+    )?;
+    UserAgentOpera::register(
+        extension,
+        "fakeit_user_agent_opera",
+        "user_agent",
+        "Generates a random Opera user-agent string.",
+    )?;
+    UserAgentLinuxPlatformToken::register(
+        extension,
         "fakeit_user_agent_linux_platform_token",
+        "user_agent",
+        "Generates a random Linux platform token for a user-agent string.",
     )?;
-    con.register_scalar_function::<UserAgentMacPlatformToken>(
+    UserAgentMacPlatformToken::register(
+        extension,
         "fakeit_user_agent_mac_platform_token",
+        "user_agent",
+        "Generates a random macOS platform token for a user-agent string.",
     )?;
-    con.register_scalar_function::<UserAgentWindowsPlatformToken>(
+    UserAgentWindowsPlatformToken::register(
+        extension,
         "fakeit_user_agent_windows_platform_token",
+        "user_agent",
+        "Generates a random Windows platform token for a user-agent string.",
     )?;
-    con.register_scalar_function::<UserAgentRandomPlatform>("fakeit_user_agent_random_platform")?;
+    UserAgentRandomPlatform::register(
+        extension,
+        "fakeit_user_agent_random_platform",
+        "user_agent",
+        "Selects a random platform token for a user-agent string.",
+    )?;
 
-    con.register_scalar_function::<VehicleType>("fakeit_vehicle_vehicle_type")?;
-    con.register_scalar_function::<VehicleFuel>("fakeit_vehicle_fuel")?;
-    con.register_scalar_function::<VehicleTransmissionGear>("fakeit_vehicle_transmission_gear")?;
-    con.register_scalar_function::<VehicleCarMaker>("fakeit_vehicle_car_maker")?;
-    con.register_scalar_function::<VehicleCarModel>("fakeit_vehicle_car_model")?;
+    VehicleType::register(
+        extension,
+        "fakeit_vehicle_vehicle_type",
+        "vehicle",
+        "Selects a random vehicle type.",
+    )?;
+    VehicleFuel::register(
+        extension,
+        "fakeit_vehicle_fuel",
+        "vehicle",
+        "Selects a random vehicle fuel type.",
+    )?;
+    VehicleTransmissionGear::register(
+        extension,
+        "fakeit_vehicle_transmission_gear",
+        "vehicle",
+        "Selects a random vehicle transmission type.",
+    )?;
+    VehicleCarMaker::register(
+        extension,
+        "fakeit_vehicle_car_maker",
+        "vehicle",
+        "Selects a random car manufacturer.",
+    )?;
+    VehicleCarModel::register(
+        extension,
+        "fakeit_vehicle_car_model",
+        "vehicle",
+        "Selects a random car model.",
+    )?;
 
-    con.register_scalar_function::<WordsWord>("fakeit_words_word")?;
-    con.register_scalar_function::<WordsSentence>("fakeit_words_sentence")?;
-    con.register_scalar_function::<WordsParagraph>("fakeit_words_paragraph")?;
-    con.register_scalar_function::<WordsQuestion>("fakeit_words_question")?;
-    con.register_scalar_function::<WordsQuote>("fakeit_words_quote")?;
+    WordsWord::register(
+        extension,
+        "fakeit_words_word",
+        "words",
+        "Selects a random word.",
+    )?;
+    WordsSentence::register(
+        extension,
+        "fakeit_words_sentence",
+        "words",
+        "Generates a random ten-word sentence.",
+    )?;
+    WordsParagraph::register(
+        extension,
+        "fakeit_words_paragraph",
+        "words",
+        "Generates three paragraphs of five ten-word sentences each, joined with spaces.",
+    )?;
+    WordsQuestion::register(
+        extension,
+        "fakeit_words_question",
+        "words",
+        "Generates a random question ending with a question mark.",
+    )?;
+    WordsQuote::register(
+        extension,
+        "fakeit_words_quote",
+        "words",
+        "Generates a random quotation with a generated author name.",
+    )?;
 
-    con.register_scalar_function::<GeneratorGenerate>("fakeit_generator_generate")?;
+    GeneratorGenerate::register(extension, "fakeit_generator_generate", "generator", "Generates a first and last name using the fixed template {firstname} {lastname}; accepts no arguments.")?;
 
-    con.register_scalar_function::<BoolRand>("fakeit_bool")?;
+    BoolRand::register(
+        extension,
+        "fakeit_bool",
+        "boolean",
+        "Generates a random boolean value.",
+    )?;
 
-    con.register_scalar_function::<StatusCodeSimple>("fakeit_status_code_simple")?;
-    con.register_scalar_function::<StatusCodeGeneral>("fakeit_status_code_general")?;
+    StatusCodeSimple::register(
+        extension,
+        "fakeit_status_code_simple",
+        "status_code",
+        "Selects a random common HTTP status code as a BIGINT.",
+    )?;
+    StatusCodeGeneral::register(
+        extension,
+        "fakeit_status_code_general",
+        "status_code",
+        "Selects a random HTTP status code from the general set as a BIGINT.",
+    )?;
 
     Ok(())
 }

@@ -1,0 +1,88 @@
+# name: test/sql/fakeit_vectors.test
+# description: Scalar registration, vector batches, and NULL handling through the V2 C API
+# group: [fakeit]
+
+require fakeit
+
+# Every generator must remain volatile after registration through the V2 API.
+query II
+SELECT count(*), bool_and(has_side_effects)
+FROM duckdb_functions()
+WHERE starts_with(function_name, 'fakeit_');
+----
+120	true
+
+# Exercise all output types across multiple vector batches.
+query IIIII
+SELECT count(DISTINCT fakeit_uuid_v4()),
+       count(fakeit_name_full()),
+       count(fakeit_status_code_general()),
+       count(fakeit_address_latitude()),
+       count(fakeit_bool())
+FROM range(5000);
+----
+5000	5000	5000	5000	5000
+
+# Ranges contain zero to avoid the upstream random-range bug noted in fakeit.test.
+# Exercise constant inputs, which may use constant vector storage.
+query I
+SELECT bool_and(fakeit_address_latitude_in_range(-20.0, 20.0) BETWEEN -20.0 AND 20.0)
+FROM range(5000);
+----
+true
+
+# Read varying bounds across multiple vector batches.
+query I
+SELECT bool_and(value BETWEEN minimum AND maximum)
+FROM (
+    SELECT minimum, maximum, fakeit_address_latitude_in_range(minimum, maximum) AS value
+    FROM (
+        SELECT -(i % 50)::DOUBLE - 1 AS minimum, (i % 50)::DOUBLE + 1 AS maximum
+        FROM range(5000) t(i)
+    )
+);
+----
+true
+
+# A constant argument and a per-row argument may have different vector storage.
+query I
+SELECT bool_and(value BETWEEN -50.0 AND maximum)
+FROM (
+    SELECT maximum, fakeit_address_longitude_in_range(-50.0, maximum) AS value
+    FROM (SELECT (i % 100)::DOUBLE + 1 AS maximum FROM range(5000) t(i))
+);
+----
+true
+
+# Filtered inputs may use a dictionary/selection vector.
+query I
+SELECT bool_and(value BETWEEN minimum AND maximum)
+FROM (
+    SELECT minimum, maximum, fakeit_address_latitude_in_range(minimum, maximum) AS value
+    FROM (
+        SELECT -(i % 50)::DOUBLE - 1 AS minimum, (i % 50)::DOUBLE + 1 AS maximum
+        FROM range(5000) t(i)
+        WHERE i % 3 = 0
+    )
+);
+----
+true
+
+# NULL bounds propagate to NULL results, including mixed valid/NULL batches.
+query II
+SELECT i, fakeit_address_latitude_in_range(minimum, maximum) IS NULL
+FROM (VALUES (1, NULL::DOUBLE, 20.0), (2, 10.0, NULL::DOUBLE), (3, 10.0, 20.0)) t(i, minimum, maximum)
+ORDER BY i;
+----
+1	true
+2	true
+3	false
+
+query II
+SELECT i, fakeit_address_longitude_in_range(minimum, maximum) IS NULL
+FROM (VALUES (1, NULL::DOUBLE, -50.0), (2, -100.0, NULL::DOUBLE), (3, -100.0, -50.0)) t(i, minimum, maximum)
+ORDER BY i;
+----
+1	true
+2	true
+3	false

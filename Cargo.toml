@@ -1,6 +1,6 @@
 [package]
 name = "fakeit"
-version = "0.3.6"
+version = "0.4.0"
 edition = "2021"
 
 [lib]
@@ -20,8 +20,12 @@ path = "src/wasm_lib.rs"
 crate-type = ["staticlib"]
 
 [dependencies]
-duckdb = { version = "1.10506.0", features = ["vtab-loadable", "vscalar"] }
-libduckdb-sys = { version = "1.10506.0", features = ["loadable-extension"] }
+duckdb-neo = { version = "0.20000.0", default-features = false, features = ["build-extension"] }
+duckdb-loadable-macros = { version = "1.20000.0", features = ["neo"] }
 fakeit = "1.4.1"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.149"
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+# fakeit's uuid 0.8 dependency gates new_v4 on this feature for Wasm targets.
+uuid = { version = "0.8.2", features = ["wasm-bindgen"] }

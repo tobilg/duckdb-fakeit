@@ -91,6 +91,18 @@ Example output:
 
 All functions are prefixed with `fakeit_` and organized by category. Most functions take no parameters and return VARCHAR or appropriate data types.
 
+After loading the extension, descriptions, examples, categories, and signatures are also available through DuckDB's function catalog:
+
+```sql
+SELECT function_name, description, parameters, parameter_types,
+       return_type, examples, categories
+FROM duckdb_functions()
+WHERE list_contains(categories, 'fakeit')
+ORDER BY function_name;
+```
+
+Each function has a `fakeit` category plus its specific category, such as `address`, `name`, or `user_agent`. The `examples` column contains callable SQL expressions.
+
 ### Address Functions
 
 Generate address-related data.
@@ -114,8 +126,10 @@ Generate address-related data.
 **Range-limited coordinates:**
 | Function | Parameters | Returns | Description |
 |----------|------------|---------|-------------|
-| `fakeit_address_latitude_in_range(min, max)` | DOUBLE, DOUBLE | DOUBLE | Latitude within range |
-| `fakeit_address_longitude_in_range(min, max)` | DOUBLE, DOUBLE | DOUBLE | Longitude within range |
+| `fakeit_address_latitude_in_range(min, max)` | DOUBLE, DOUBLE | DOUBLE | Latitude generated using the requested bounds |
+| `fakeit_address_longitude_in_range(min, max)` | DOUBLE, DOUBLE | DOUBLE | Longitude generated using the requested bounds |
+
+Bounds are in degrees. Both functions return NULL if either bound is NULL. The upstream `fakeit` random generator can return values outside the requested interval; the range bounds are not guaranteed.
 
 ### Name Functions
 
@@ -219,7 +233,7 @@ Generate currency-related data.
 |----------|---------|-------------|
 | `fakeit_currency_short()` | VARCHAR | Currency code (e.g., "USD") |
 | `fakeit_currency_long()` | VARCHAR | Currency name (e.g., "US Dollar") |
-| `fakeit_currency_price()` | DOUBLE | Random price value |
+| `fakeit_currency_price()` | VARCHAR | Price generated with fixed bounds of 0 and 1000, formatted with two decimal places |
 
 ### DateTime Functions
 
@@ -227,9 +241,9 @@ Generate date and time data.
 
 | Function | Returns | Description |
 |----------|---------|-------------|
-| `fakeit_datetime_month()` | VARCHAR | Month name |
+| `fakeit_datetime_month()` | VARCHAR | Month number as text |
 | `fakeit_datetime_day()` | VARCHAR | Day of month |
-| `fakeit_datetime_week_day()` | VARCHAR | Day of week |
+| `fakeit_datetime_week_day()` | VARCHAR | Numeric weekday value as text |
 | `fakeit_datetime_year()` | VARCHAR | Year |
 | `fakeit_datetime_hour()` | VARCHAR | Hour |
 | `fakeit_datetime_minute()` | VARCHAR | Minute |
@@ -239,7 +253,7 @@ Generate date and time data.
 | `fakeit_datetime_timezone_full()` | VARCHAR | Full timezone name |
 | `fakeit_datetime_timezone_abv()` | VARCHAR | Timezone abbreviation |
 | `fakeit_datetime_timezone_offset()` | VARCHAR | Timezone offset |
-| `fakeit_datetime_date()` | VARCHAR | Random date |
+| `fakeit_datetime_date()` | VARCHAR | Generated date text with secs and nsecs fields |
 
 ### File Functions
 
@@ -329,7 +343,7 @@ Generate payment card data (for testing only).
 | `fakeit_payment_credit_card_number()` | VARCHAR | Credit card number |
 | `fakeit_payment_credit_card_exp()` | VARCHAR | Expiration date |
 | `fakeit_payment_credit_card_cvv()` | VARCHAR | CVV code |
-| `fakeit_payment_credit_card_luhn_number()` | VARCHAR | Luhn-valid number |
+| `fakeit_payment_credit_card_luhn_number()` | VARCHAR | Test card number from the upstream Luhn-based generator |
 
 ### Person Functions
 
@@ -398,13 +412,11 @@ Generate random boolean values.
 
 ### Generator Functions
 
-Template-based generation.
+Generate a first and last name from the fixed `{firstname} {lastname}` template.
 
-| Function | Parameters | Returns | Description |
-|----------|------------|---------|-------------|
-| `fakeit_generator_generate(template)` | VARCHAR | VARCHAR | Generate from template pattern |
-
-Template syntax: Use `{category.function}` patterns (e.g., `{name.first} {name.last} lives in {address.city}`).
+| Function | Returns | Description |
+|----------|---------|-------------|
+| `fakeit_generator_generate()` | VARCHAR | Generate from the fixed name template; takes no arguments |
 
 ## Examples
 
@@ -491,20 +503,24 @@ make test_release
 
 ### Version Switching
 
-Test with different DuckDB versions:
+The extension uses DuckDB's V2 C API through `duckdb-neo` `0.20000.0`, with `libduckdb-sys` and extension macros `1.20000.0`. The extension metadata, local tests, and CI target DuckDB `v2.0.0`. The V2 Rust API is experimental, and the compiled extension is tied to this DuckDB runtime version.
+
+Recreate the test environment when switching DuckDB versions:
 
 ```shell
 make clean_all
-DUCKDB_TEST_VERSION=v1.4.2 make configure
+DUCKDB_TEST_VERSION=2.0.0 make configure
 make debug
 make test_debug
 ```
 
-### Local Testing with Python 3.14+
+### Selecting a Python Version
 
-Due to DuckDB's unstable C API (`USE_UNSTABLE_C_API=1`), local testing may encounter segmentation faults when using Python 3.14+, as pre-built wheels don't exist for DuckDB v1.4.2 with Python 3.14. The extension works perfectly in CI/CD and for end users.
+`make configure` uses `python3` by default. To select a different interpreter when creating the test environment, set `PYTHON_BIN`:
 
-**Workaround**: Use Python 3.13 for local testing. The Makefile is already configured to use Python 3.13.
+```shell
+PYTHON_BIN=python3.13 make configure
+```
 
 ### Windows Python 3.11
 

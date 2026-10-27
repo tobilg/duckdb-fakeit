@@ -1,0 +1,60 @@
+# name: test/sql/fakeit_documentation.test
+# description: Function documentation is exposed through DuckDB's catalog
+# group: [fakeit]
+
+require fakeit
+
+# All registered functions must expose nonempty documentation and both categories.
+query II
+SELECT count(*), count(*) FILTER (
+    WHERE length(trim(coalesce(description, ''))) > 0
+      AND len(examples) = 1
+      AND length(examples[1]) > 0
+      AND list_contains(categories, 'fakeit')
+      AND len(categories) = 2
+)
+FROM duckdb_functions()
+WHERE starts_with(function_name, 'fakeit_');
+----
+120	120
+
+# Zero-argument examples must use the registered SQL function name.
+query I
+SELECT count(*)
+FROM duckdb_functions()
+WHERE starts_with(function_name, 'fakeit_')
+  AND len(parameters) = 0
+  AND examples[1] = function_name || '()';
+----
+118
+
+# Range functions have named DOUBLE parameters and callable example arguments.
+query I
+SELECT count(*)
+FROM duckdb_functions()
+WHERE function_name IN ('fakeit_address_latitude_in_range', 'fakeit_address_longitude_in_range')
+  AND parameters = ['min', 'max']
+  AND parameter_types = ['DOUBLE', 'DOUBLE']
+  AND return_type = 'DOUBLE'
+  AND examples[1] = function_name || '(-10.0, 10.0)'
+  AND list_contains(categories, 'address');
+----
+2
+
+# Read documentation as a client would, including its category and expression.
+query TTT
+SELECT description, examples[1], categories[2]
+FROM duckdb_functions()
+WHERE function_name = 'fakeit_name_full';
+----
+Generates a random full name with a first and last name.	fakeit_name_full()	name
+
+# Fixed-setting wrappers describe their actual signatures and return types.
+query TT
+SELECT return_type, examples[1]
+FROM duckdb_functions()
+WHERE function_name IN ('fakeit_currency_price', 'fakeit_generator_generate')
+ORDER BY function_name;
+----
+VARCHAR	fakeit_currency_price()
+VARCHAR	fakeit_generator_generate()

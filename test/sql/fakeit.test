@@ -79,9 +79,11 @@ SELECT fakeit_address_longitude() BETWEEN -180.0 AND 180.0;
 ----
 true
 
-# NOTE: Commenting out parametrized range function tests that fail intermittently in CI
-# The functions work correctly locally but may have issues in CI environment
-# TODO: Investigate CI-specific failure (returns 0 instead of valid range values)
+# These range checks remain disabled: fakeit 1.4.1 uses simplerand 1.6.0,
+# whose floating-point rand_range scales the result after applying the lower
+# bound and can return values outside the requested interval.
+# This is independent of the DuckDB C API. Vector/NULL handling is covered in
+# fakeit_vectors.test using ranges that contain zero.
 # query I
 # SELECT fakeit_address_latitude_in_range(10.0, 20.0) BETWEEN 10.0 AND 20.0;
 # ----
